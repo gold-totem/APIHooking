@@ -1,0 +1,18 @@
+{
+  "name": "apihooking",
+  "version": "0.1.0",
+  "dependencies": [
+    "spdlog",
+    "nlohmann-json",
+    {
+      "name": "detours",
+      "platform": "windows"
+    }
+  ],
+  "overrides": [
+    { "name": "spdlog",        "version": "1.17.0"     },
+    { "name": "nlohmann-json", "version": "3.12.0#2"   },
+    { "name": "detours",       "version-date": "2025-06-20" }
+  ],
+  "builtin-baseline": "e6ed7c5be05eaedc2d06ee3e51bd059409429c5e"
+}

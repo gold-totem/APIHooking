@@ -1,0 +1,29 @@
+add_executable(Injector)
+
+target_sources( Injector
+    PRIVATE
+
+    FILE_SET HEADERS
+    BASE_DIRS includes
+    FILES 
+	includes/config.h
+	includes/injector.h
+)
+
+target_sources( Injector
+    PRIVATE
+
+    FILE_SET SOURCES
+    FILES
+    	main.cpp
+    	config.cpp
+    	injector.cpp
+    
+)
+
+target_compile_features(Injector PRIVATE cxx_std_20)
+
+target_link_libraries(Injector PRIVATE
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+)
