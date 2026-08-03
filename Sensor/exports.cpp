@@ -22,7 +22,7 @@ namespace {
 }
 
 extern "C" __declspec(dllexport) bool initHooks() {
-	Monitor::Logger::initLogger();
+	Logger::initLogger();
 	spdlog::info("Running initHooks.");
 
 	if (!Monitor::createHooks()) {

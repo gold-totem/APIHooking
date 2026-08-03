@@ -7,6 +7,7 @@ endif()
 
 project(APIHooking LANGUAGES CXX)
 
+add_definitions(-DUNICODE -D_UNICODE)
 
 set(PHNT_GIT_TAG "53fbbdc")
 

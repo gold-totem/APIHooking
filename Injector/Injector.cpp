@@ -1,68 +1,27 @@
 #include <Windows.h>
-#include <Psapi.h>
 #include <wtsapi32.h>
-
 #include <string_view>
 #include <cwchar>
 #include <cwctype>
 #include <iostream>
 #include <cstring>
 #include <vector>
+#include <psapi.h>
+#include <optional>
+#include <spdlog/spdlog.h>
 
+#include "includes/config.h"
+#include "includes/injector.h"
 #pragma comment(lib, "Wtsapi32.lib")
 
 namespace {
+    
 
     using pInitHooks = bool(__cdecl*)();
-
-    struct Constants {
-        const std::string dllName;
-        const std::string monitorDLLPath64;
-        const std::string monitorDLLPath32;
-        const std::string functionName;
-
-        Constants(
-            std::string dllName, std::string m64, std::string m32, std::string funcName
-        ) :
-            dllName{ std::move(dllName) },
-            monitorDLLPath64{ std::move(m64) },
-            monitorDLLPath32{ std::move(m32) },
-            functionName{ std::move(funcName) }
-        {
-        }
-
-    };
     enum class Bitness {
         BIT_64,
         BIT_32,
         BIT_INVALID
-    };
-    struct ProcConsts {
-        const std::string_view monitorDLLPath;
-        const std::string dllName;
-        const uintptr_t hookingFuncDelta;
-        const uintptr_t loadLibraryDelta;
-        const SIZE_T sizeOfdllPath;
-
-        ProcConsts(std::string_view dllPath,
-            std::string dllN,
-            uintptr_t hookDelta,
-            uintptr_t loadDelta
-        ) :
-            monitorDLLPath{ dllPath },
-            dllName{ dllN },
-            hookingFuncDelta{ hookDelta },
-            loadLibraryDelta{ loadDelta },
-            sizeOfdllPath{ (dllPath.length() + 1) * sizeof(char) }
-        {
-        }
-    };
-
-    struct ProcInfo {
-        HANDLE hProcess{ NULL };
-        enum Bitness bitness;
-        const ProcConsts* pProcConst;
-
     };
 
     HANDLE getProcessHandle(std::wstring_view processName) {
@@ -97,17 +56,18 @@ namespace {
     }
     Bitness getProcessBitType(HANDLE hProcess) {
         if (!hProcess) {
-            std::cerr << "Invalid process Handle recived";
+            spdlog::error("[Injector] Invalid process Handle recived");
             return Bitness::BIT_INVALID;
         }
         USHORT processMachine{ 0 };
         USHORT nativeMachine{ 0 };
         if (!IsWow64Process2(hProcess, &processMachine, &nativeMachine)) {
-            std::cerr << "Could not retrive bitness of target process: " << GetLastError();
+
+            spdlog::error("[Injector] Could not retrive bitness of target process: {}", GetLastError());
             return Bitness::BIT_INVALID;
         }
         if (nativeMachine != IMAGE_FILE_MACHINE_AMD64) {
-            std::cerr << "Invalid native machine type detected";
+            spdlog::error("[Injector] Invalid native machine type detected");
             return Bitness::BIT_INVALID;
         }
         if (processMachine == IMAGE_FILE_MACHINE_UNKNOWN) {
@@ -138,18 +98,22 @@ namespace {
         //TODO: verify thing is a 32 bit dll
         HANDLE hDLLFile = CreateFileA(dll32Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hDLLFile == INVALID_HANDLE_VALUE) {
-            std::cerr << "Invalid handle returned: " << GetLastError() << '\n';
+
+            spdlog::error("[Injector] Invalid handle returned");
             return 0;
         }
         HANDLE hMapping = CreateFileMappingA(hDLLFile, NULL, PAGE_READONLY | SEC_IMAGE, 0, 0, NULL);
         if (!hMapping) {
-            std::cerr << "CreateFileMappingA failed: " << GetLastError() << '\n';
+
+            spdlog::error("[Injector] File mapping failed with: {}", GetLastError());
+
             CloseHandle(hDLLFile);
             return 0;
         }
         BYTE* base = reinterpret_cast<BYTE*>(MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0));
         if (!base) {
-            std::cerr << "MapViewOfFile failed: " << GetLastError() << '\n';
+            
+            spdlog::error("[Injector] Mapping view failed with: {}", GetLastError());
             CloseHandle(hDLLFile);
             CloseHandle(hMapping);
             return 0;
@@ -174,7 +138,8 @@ namespace {
             }
         }
         if (!foundFunction) {
-            std::cerr << "Function: " << functionName << " not found in: " << dll32Path << std::endl;
+            spdlog::error("[Injector] Function: {} not found in {}", functionName, dll32Path);
+
             UnmapViewOfFile(base);
             CloseHandle(hMapping);
             CloseHandle(hDLLFile);
@@ -199,7 +164,9 @@ namespace {
 
         DWORD sizeNeeded = 0;
         if (!EnumProcessModulesEx(hProcess, nullptr, 0, &sizeNeeded, flags)) {
-            std::cerr << "EnumProcessModulesEx failed (get size): " << GetLastError() << "\n";
+
+            spdlog::error("[Injector] EnumProcessModulesEx failed (get size): {}", GetLastError());
+
             return NULL;
         }
         if (sizeNeeded == 0) return NULL;
@@ -208,7 +175,8 @@ namespace {
         std::vector<HMODULE> modules(count);
         DWORD bytesReturned = 0;
         if (!EnumProcessModulesEx(hProcess, modules.data(), static_cast<DWORD>(modules.size() * sizeof(HMODULE)), &bytesReturned, flags)) {
-            std::cerr << "EnumProcessModulesEx failed (retrieve): " << GetLastError() << "\n";
+            spdlog::error("[Injector] EnumProcessModulesEx failed (retrieve): {}", GetLastError());
+
             return NULL;
         }
         size_t numReturned = bytesReturned / sizeof(HMODULE);
@@ -228,107 +196,113 @@ namespace {
     }
 
 }
+namespace injector {
 
-int main(int argc, char* argv[]) {
 
-    //TODO: take these from a config file or something
-    constexpr std::string_view dllName{ "monitor" };
-    constexpr std::string_view dll64Path{ "D:\\workspace\\VSRepos\\Learning\\DetoursTest\\x64\\Release\\monitor64.dll" };
-    constexpr std::string_view dll32Path{ "D:\\workspace\\VSRepos\\Learning\\DetoursTest\\Release\\monitor32.dll" };
-    constexpr std::string_view functionName{ "initHooks" };
+    std::optional<Injector> Injector::get(const config::Config& config) {
 
-    const struct Constants constants {
-        dllName.data(),
-            dll64Path.data(),
-            dll32Path.data(),
-            functionName.data()
-    };
+        constexpr std::string_view kernel32DLL{ "C:\\WINDOWS\\System32\\KERNEL32.DLL" };
+        constexpr std::string_view woWKernel32DLL{ "C:\\WINDOWS\\SysWOW64\\KERNEL32.DLL" };
+        constexpr std::string_view loadLibraryName{ "LoadLibraryA" };
 
-    constexpr std::string_view kernel32DLL = "C:\\WINDOWS\\System32\\KERNEL32.DLL";
-    constexpr std::string_view woWKernel32DLL = "C:\\WINDOWS\\SysWOW64\\KERNEL32.DLL";
-    constexpr std::string_view loadLibraryName = "LoadLibraryA";
+        uintptr_t loadLibraryDelta64 = getDelta64(kernel32DLL.data(), loadLibraryName);
+        uintptr_t loadLibraryDelta32 = getDelta32(woWKernel32DLL.data(), loadLibraryName);
 
-    uintptr_t initHooksDelta64 = getDelta64(dll64Path.data(), functionName.data());
-    uintptr_t initHooksDelta32 = getDelta32(dll32Path.data(), functionName.data());
+        if (!loadLibraryDelta32 || !loadLibraryDelta64) {
+            spdlog::error("[Injector] Error retrieving LoadLibraryA delta");
+            return std::nullopt;
+        }
 
-    uintptr_t loadLibraryDelta64 = getDelta64(kernel32DLL.data(), loadLibraryName);
-    uintptr_t loadLibraryDelta32 = getDelta32(woWKernel32DLL.data(), loadLibraryName);
+        uintptr_t calleeDelta64 = getDelta64(config.path64, config.calleeName);
+        uintptr_t calleeDelta32 = getDelta32(config.path32, config.calleeName);
 
-    const struct ProcConsts procConsts64 {
-        constants.monitorDLLPath64,
-            constants.dllName + "64.dll",
-            initHooksDelta64,
-            loadLibraryDelta64
-    };
+        if (!calleeDelta64 || !calleeDelta32) {
+            spdlog::error("[Injector] Error retrieving callee delta");
+            return std::nullopt;
+        }
 
-    const struct ProcConsts procConsts32 {
-        constants.monitorDLLPath32,
-            constants.dllName + "32.dll",
-            initHooksDelta32,
-            loadLibraryDelta32
-    };
-    struct ProcInfo procInfo { 0 };
+        ProcConsts p64{ config.path64 , calleeDelta64, loadLibraryDelta64 };
 
-    procInfo.hProcess = getProcessHandle(L"Target.exe");
-    if (!procInfo.hProcess) {
-        std::cerr << "Open Process failed: " << GetLastError();
-        return 1;
+        ProcConsts p32{ config.path32 , calleeDelta32, loadLibraryDelta32 };
+
+        return Injector(p64, p32);
     }
 
-    procInfo.bitness = getProcessBitType(procInfo.hProcess);
-    if (procInfo.bitness == Bitness::BIT_INVALID) {
-        std::cerr << "Invalid Bit type found." << std::endl;
-        CloseHandle(procInfo.hProcess);
-        return 1;
+    bool Injector::inject_pid(DWORD pid) {
+
+
+        HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+        if (!hProcess) {
+            spdlog::error("[Injector] Opening target failed with: {}", GetLastError());
+            return false;
+        }
+
+        auto bitness = getProcessBitType(hProcess);
+
+        if (bitness == Bitness::BIT_INVALID) {
+            spdlog::error("[Injector] Invalid/Unsupported architecture found");
+            CloseHandle(hProcess);
+            return false;
+        }
+        const ProcConsts* pProcConst{ &proc64 };
+
+        if (bitness == Bitness::BIT_32) {
+            pProcConst = &proc32;
+        }
+
+        LPVOID writtenAddress = VirtualAllocEx(hProcess, NULL, pProcConst->dllPath.length() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
+        if (!writtenAddress) {
+            spdlog::error("[Injector] Allocating memory in target failed with: {}", GetLastError());
+            CloseHandle(hProcess);
+            return false;
+        }
+
+        SIZE_T writtenBytes{ 0 };
+        BOOL writeProcessMemory = WriteProcessMemory(hProcess, writtenAddress, pProcConst->dllPath.data(), pProcConst->dllPath.length() + 1, &writtenBytes);
+        if (!writeProcessMemory || (writtenBytes < (pProcConst->dllPath.length() + 1))) {
+            spdlog::error("[Injector] Writing in target's memory failed with: {}", GetLastError());
+            CloseHandle(hProcess);
+            return false;
+        }
+
+        uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(getModuleHandle("KERNEL32.DLL", hProcess, bitness)) + pProcConst->loadLibraryDelta };
+        HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddress), writtenAddress, 0, NULL);
+        if (!hThread) {
+            spdlog::error("[Injector] LoadLibrary thread creation failed with: {}", GetLastError());
+            CloseHandle(hProcess);
+            return false;
+        }
+
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+
+        uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(getModuleHandle(pProcConst->dllPath, hProcess, bitness)) + pProcConst->calleeDelta };
+        if (!initHooksAddress) {
+            spdlog::error("[Injector] Failed to retrieve callee delta in target");
+            return false;
+        }
+
+        HANDLE hInitThread = CreateRemoteThread(hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(initHooksAddress), NULL, 0, NULL);
+        if (!hInitThread) {
+            spdlog::error("[Injector] Invloking callee failed with: {}", GetLastError());
+            CloseHandle(hProcess);
+            return false;
+        }
+        WaitForSingleObject(hInitThread, INFINITE);
+        CloseHandle(hInitThread);
+
+        CloseHandle(hProcess);
+
+        spdlog::info("Successfully injected");
+        return true;
     }
 
-    if (procInfo.bitness == Bitness::BIT_32) {
-        procInfo.pProcConst = &procConsts32;
-    }
-    else {
-        procInfo.pProcConst = &procConsts64;
+
+    bool Injector::run() {
+
+        switch(config.injectorMode)
+
     }
 
-    LPVOID writtenAddress = VirtualAllocEx(procInfo.hProcess, NULL, procInfo.pProcConst->sizeOfdllPath, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-
-    if (!writtenAddress) {
-        std::cerr << "VirtualAllocEx failed: " << GetLastError();
-        CloseHandle(procInfo.hProcess);
-        return 1;
-    }
-
-    SIZE_T writtenBytes{ 0 };
-    BOOL writeProcessMemory = WriteProcessMemory(procInfo.hProcess, writtenAddress, procInfo.pProcConst->monitorDLLPath.data(), procInfo.pProcConst->sizeOfdllPath, &writtenBytes);
-    if (!writeProcessMemory || (writtenBytes < procInfo.pProcConst->sizeOfdllPath)) {
-        std::cout << "WriteProcessMemory Failed: " << GetLastError();
-        CloseHandle(procInfo.hProcess);
-        return 1;
-    }
-
-    uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(getModuleHandle("KERNEL32.DLL", procInfo.hProcess, procInfo.bitness)) + procInfo.pProcConst->loadLibraryDelta };
-    HANDLE hThread = CreateRemoteThread(procInfo.hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddress), writtenAddress, 0, NULL);
-    if (!hThread) {
-        std::cerr << "Thread Creation for LoadLibraryA failed: " << GetLastError();
-        CloseHandle(procInfo.hProcess);
-        return 1;
-    }
-
-    WaitForSingleObject(hThread, INFINITE);
-    CloseHandle(hThread);
-    uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(getModuleHandle(procInfo.pProcConst->dllName, procInfo.hProcess, procInfo.bitness)) + procInfo.pProcConst->hookingFuncDelta };
-    if (!initHooksAddress) {
-        std::cerr << "Could not get initHooks address\n";
-        return 1;
-    }
-
-    HANDLE hInitThread = CreateRemoteThread(procInfo.hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(initHooksAddress), NULL, 0, NULL);
-    if (!hInitThread) {
-        std::cerr << "Thread Creation for initHooksAddress failed: " << GetLastError();
-        CloseHandle(procInfo.hProcess);
-        return 1;
-    }
-    WaitForSingleObject(hInitThread, INFINITE);
-    CloseHandle(hInitThread);
-    std::cout << "successfully injected";
-    CloseHandle(procInfo.hProcess);
 }

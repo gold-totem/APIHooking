@@ -1,32 +1,22 @@
 {
     "payload_dll":{
-        "path_dll_64":"foo64.dll",
-        "path_dll_32":"foo64.dll",
-        "exported_func_name":"export"
+        "path_64":"foo64.dll",
+        "path_32":"foo64.dll",
+        "callee_name":"export"
     },
     "injector":{
-        "inject_once":{
-            "target":[
-                123,
-                321,
-                "exename1",
-                "exename2",
-                "ALL_PROCS"
-            ]
-        },
-        "inject_cont":{
-             "targe":[
-                "exename1",
-                "exename2",
-                "ALL_PROCS"
-            ],
-            "search_intervel": 60
-        },
-        "inject_create":{
-             "targe":[
-                "exename1 -command",
-                "exename2 -command"
-            ]
-        }
-    }
+        "mode":"once/continous/create",
+        "target_pids":[
+            123,
+            321
+        ],
+        "target_names":[
+
+        "exename1",
+        "exename2 -command ",
+        "ALL_PROCS"
+        ],
+        "search_intervel_seconds": 60
+    },
+    "log_level":"debug"
 }

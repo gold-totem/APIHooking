@@ -9,6 +9,7 @@ target_sources( Sensor
 	includes/framework.h
 	includes/pch.h
 )
+
 target_include_directories(Sensor PRIVATE ${DETOURS_INCLUDE_DIRS})
 
 target_sources( Sensor
