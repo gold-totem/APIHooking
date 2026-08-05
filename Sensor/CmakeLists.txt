@@ -8,6 +8,7 @@ target_sources( Sensor
     FILES
 	includes/framework.h
 	includes/pch.h
+    	includes/hooking.h
 )
 
 target_include_directories(Sensor PRIVATE ${DETOURS_INCLUDE_DIRS})

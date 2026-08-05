@@ -1,9 +1,9 @@
 #include "config.h"
-namespace injector {
+namespace Injector {
     class Injector {
 
     public:
-        static std::optional<Injector> get(const config::Config& c);
+        static std::optional<Injector> get(const Config::Config& c);
 
         bool run();
 
@@ -27,9 +27,9 @@ namespace injector {
             }
         } proc64, proc32;
 
-        const config::Config& config;
+        const Config::Config& config;
 
-        Injector(ProcConsts p64, ProcConsts p32, const config::Config& c) :proc64(p64), proc32(p32), config(c) {}
+        Injector(ProcConsts p64, ProcConsts p32, const Config::Config& c) :proc64(p64), proc32(p32), config(c) {}
 
         bool inject_pid(DWORD pid);
 

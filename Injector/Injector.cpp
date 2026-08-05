@@ -196,10 +196,10 @@ namespace {
     }
 
 }
-namespace injector {
+namespace Injector {
 
 
-    std::optional<Injector> Injector::get(const config::Config& config) {
+    std::optional<Injector> Injector::get(const Config::Config& config) {
 
         constexpr std::string_view kernel32DLL{ "C:\\WINDOWS\\System32\\KERNEL32.DLL" };
         constexpr std::string_view woWKernel32DLL{ "C:\\WINDOWS\\SysWOW64\\KERNEL32.DLL" };
@@ -225,7 +225,7 @@ namespace injector {
 
         ProcConsts p32{ config.path32 , calleeDelta32, loadLibraryDelta32 };
 
-        return Injector(p64, p32);
+        return Injector(p64, p32, config);
     }
 
     bool Injector::inject_pid(DWORD pid) {
@@ -244,11 +244,8 @@ namespace injector {
             CloseHandle(hProcess);
             return false;
         }
-        const ProcConsts* pProcConst{ &proc64 };
 
-        if (bitness == Bitness::BIT_32) {
-            pProcConst = &proc32;
-        }
+        const ProcConsts* const pProcConst{ (bitness == Bitness::BIT_32)? &proc32 : &proc64 };
 
         LPVOID writtenAddress = VirtualAllocEx(hProcess, NULL, pProcConst->dllPath.length() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
@@ -301,7 +298,7 @@ namespace injector {
 
     bool Injector::run() {
 
-        switch(config.injectorMode)
+        // switch (config.injectorMode)
 
     }
 

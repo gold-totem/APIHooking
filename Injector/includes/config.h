@@ -2,7 +2,7 @@
 #include <string>
 #include <optional>
 
-namespace config {
+namespace Config {
 
     enum class InjectorMode {
         INJECT_ONCE,

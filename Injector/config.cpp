@@ -46,7 +46,7 @@ namespace {
     }
 
 }
-namespace config {
+namespace Config {
     std::optional<Config> getConfig(std::string_view configPath) {
         std::ifstream ifFile(configPath.data());
         if (!ifFile.is_open()) {
