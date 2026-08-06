@@ -7,10 +7,11 @@
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace {
-	void initLogger() {
+	bool initLogger() {
+
 		char processName[MAX_PATH];
 		if (GetModuleFileNameA(nullptr, processName, MAX_PATH) == 0) {
-			return;
+			return false;
 		}
 
 		char path[MAX_PATH];
@@ -23,72 +24,83 @@ namespace {
 			path,
 			sizeof(path)
 		)) {
-			return;
+			return false;
 		}
+
+		auto now = std::chrono::system_clock::now();
+		auto now_seconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+
+		std::string time = std::format("{:%Y-%m-%d_%H-%M-%S}", now_seconds);
+
 		std::string log_path = path; 
 
-		log_path += "\\" + std::filesystem::path(processName).stem().string() + ".log";
+		log_path += '\\' + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
 
-		std::filesystem::create_directories("d:/logs");
-
-		auto logger = spdlog::basic_logger_mt("Sensor", log_path, true);
-
-		spdlog::set_default_logger(logger);
+		auto sensor = spdlog::basic_logger_mt("Sensor", log_path, true);
 		spdlog::set_level(spdlog::level::info);
+
+		return true;
 	}
 }
 
-extern "C" __declspec(dllexport) bool initHooks() {
-	Logger::initLogger();
-	spdlog::info("Running initHooks.");
+extern "C" __declspec(dllexport) bool hookProc() {
 
-	if (!monitor::createHooks()) {
-		spdlog::error("createHooks failed.");
+
+	SPDLOG_INFO("Running hookProc.");
+
+	if (!initLogger()) {
+		SPDLOG_ERROR("Failed initializing logger.");
+	}
+
+	if (!Monitor::createHooks()) {
+		SPDLOG_ERROR("createHooks failed.");
 		return false;
 	}
-	spdlog::info("createHooks successful.");
+
+	SPDLOG_INFO("Successfully initialized hooks.");
 
 	if (DetourTransactionBegin() != NO_ERROR) {
-		spdlog::error("DetourTransactionBegin failed.");
+		SPDLOG_ERROR("DetourTransactionBegin failed.");
 		return false;
 	}
-	spdlog::info("DetourTransactionBegin successful.");
+
+	SPDLOG_INFO("DetourTransactionBegin successful.");
+
 	HANDLE hThread = GetCurrentThread();
 	if (!hThread) {
 		DetourTransactionAbort();
-		spdlog::error("GetCurrentThread failed: {}.", GetLastError());
+		SPDLOG_ERROR("GetCurrentThread failed: {}.", GetLastError());
 		return false;
 	}
 
-	spdlog::info("GetCurrentThread successful.");
+	SPDLOG_INFO("GetCurrentThread successful.");
 
 	if ((DetourUpdateThread(hThread)) != NO_ERROR) {
-		spdlog::error("DetourUpdateThread failed.");
+		SPDLOG_ERROR("DetourUpdateThread failed.");
 		DetourTransactionAbort();
 		return false;
 	}
-	spdlog::info("DetourUpdateThread successful for current thread.");
+	SPDLOG_INFO("DetourUpdateThread successful for current thread.");
 
 	HPSSWALK walkMarkerHandle{ 0 };
 
 	DWORD pssStatus = PssWalkMarkerCreate(NULL, &walkMarkerHandle);
 	if (pssStatus != ERROR_SUCCESS) {
-		spdlog::error("PssWalkMarkerCreate failed");
-		return 1;
+		SPDLOG_ERROR("PssWalkMarkerCreate failed");
+		return false;
 	}
 
 
 	std::vector<HANDLE> threadHandles;
 
+	//-------------------
+
 	HPSS snapshotHandle{ 0 };
 	pssStatus = PssCaptureSnapshot(GetCurrentProcess(), PSS_CAPTURE_THREADS, NULL, &snapshotHandle);
 	if (pssStatus != ERROR_SUCCESS) {
-		spdlog::error("PssCaptureSnapshot failed");
-		return 1;
+		SPDLOG_ERROR("PssCaptureSnapshot failed");
+		return false;
 	}
-
-	
-
 
 	PSS_THREAD_ENTRY threadEntry{ 0 };
 	while (ERROR_SUCCESS == PssWalkSnapshot(snapshotHandle, PSS_WALK_THREADS, walkMarkerHandle, &threadEntry, sizeof(threadEntry))) {
@@ -97,41 +109,38 @@ extern "C" __declspec(dllexport) bool initHooks() {
 
 		HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, threadEntry.ThreadId);
 		if (!hThread) {
-			spdlog::error("OpenThread failed");
-			return 1;
+			SPDLOG_ERROR("OpenThread failed");
+			return false;
 		}
+		SPDLOG_INFO("OpenThread successful.");
 		threadHandles.push_back(hThread);
-		spdlog::info("OpenThread successful.");
 
 		if ((DetourUpdateThread(hThread)) != NO_ERROR) {
-			spdlog::error("DetourUpdateThread failed.");
+			SPDLOG_ERROR("DetourUpdateThread failed.");
 			DetourTransactionAbort();
 			CloseHandle(hThread);
 			return false;
 		}
-
-		spdlog::info("DetourUpdateThread successful.");
 	}
+	 //--------------------
+	SPDLOG_INFO("DetourUpdateThread successful for other threads.");
 
-	spdlog::info("DetourUpdateThread successful for other threads.");
-
-	if (!monitor::attachHooks()) {
-		spdlog::error("AttachHooks failed: {}.");
+	if (!Monitor::attachHooks()) {
+		SPDLOG_ERROR("AttachHooks failed.");
 		DetourTransactionAbort();
 		return false;
 	}
-	spdlog::info("attachHooks successful");
+	SPDLOG_INFO("attachHooks successful");
+	
 	if ((DetourTransactionCommit()) != NO_ERROR) {
-		spdlog::error("DetourTransactionCommit failed: {}.");
+		SPDLOG_ERROR("DetourTransactionCommit failed.");
 		DetourTransactionAbort();
 		return false;
 	}
-	spdlog::info("successfully attached detours.");
+	SPDLOG_INFO("successfully attached detours.");
 
 	pssStatus = PssWalkMarkerFree(walkMarkerHandle);
-	if (pssStatus != ERROR_SUCCESS) {
-		spdlog::error("PssWalkMarkerFree failed: {}.", GetLastError());
-	}
+
 	for (auto& handle : threadHandles) {
 		CloseHandle(handle);
 	}

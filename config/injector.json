@@ -2,7 +2,7 @@
     "payload_dll":{
         "path_64":"foo64.dll",
         "path_32":"foo64.dll",
-        "callee_name":"export"
+        "callee_name":"hookProc"
     },
     "injector":{
         "mode":"once/continous/create",

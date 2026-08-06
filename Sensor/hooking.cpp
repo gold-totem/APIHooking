@@ -1,11 +1,7 @@
 #include <phnt_windows.h>
 #include <phnt.h>
 
-
 #include "detours/detours.h"
-
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
-#include "spdlog/spdlog.h"
 #include "includes/hooking.h"
 
 #define CREATE_HOOK(functionName) \
@@ -17,6 +13,9 @@
 
 
 namespace {
+
+	auto sensor = spdlog::get("Sensor");
+
 	using pLdrLoadDll = NTSTATUS
 		(NTAPI*)
 		(
@@ -37,8 +36,8 @@ namespace {
 			_In_ PCUNICODE_STRING DllName,
 			_Out_ PVOID* DllHandle
 		) {
-			//log
-
+			if (sensor) sensor->info("LdrLoadDll");
+			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
 	}
@@ -47,13 +46,15 @@ namespace {
 namespace Monitor {
 	bool createHooks() {
 
-		SPDLOG_INFO("[Hook] Creating hooks");
+		SPDLOG_INFO("[Hook] createHooks called.");
 
 		HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
 		if (!hNtdll) {
 			SPDLOG_ERROR("Getting handle to ntdll failed with: {}", GetLastError());
 			return false;
 		}
+
+		SPDLOG_INFO("[Hook] Retrieved ntdll handle.");
 
 		CREATE_HOOK(LdrLoadDll);
 
