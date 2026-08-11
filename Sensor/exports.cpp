@@ -92,10 +92,11 @@ extern "C" __declspec(dllexport) bool hookProc() {
 
 
 	std::vector<HANDLE> threadHandles;
+	
+	HPSS snapshotHandle{ 0 };
 
 	//-------------------
 
-	HPSS snapshotHandle{ 0 };
 	pssStatus = PssCaptureSnapshot(GetCurrentProcess(), PSS_CAPTURE_THREADS, NULL, &snapshotHandle);
 	if (pssStatus != ERROR_SUCCESS) {
 		SPDLOG_ERROR("PssCaptureSnapshot failed");
@@ -110,6 +111,12 @@ extern "C" __declspec(dllexport) bool hookProc() {
 		HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, threadEntry.ThreadId);
 		if (!hThread) {
 			SPDLOG_ERROR("OpenThread failed");
+			DetourTransactionAbort();
+			PssWalkMarkerFree(walkMarkerHandle);
+			PssFreeSnapshot(GetCurrentProcess(), snapshotHandle);
+			for (auto& handle : threadHandles) {
+				CloseHandle(handle);
+			}
 			return false;
 		}
 		SPDLOG_INFO("OpenThread successful.");
@@ -118,12 +125,18 @@ extern "C" __declspec(dllexport) bool hookProc() {
 		if ((DetourUpdateThread(hThread)) != NO_ERROR) {
 			SPDLOG_ERROR("DetourUpdateThread failed.");
 			DetourTransactionAbort();
-			CloseHandle(hThread);
+			PssWalkMarkerFree(walkMarkerHandle);
+			PssFreeSnapshot(GetCurrentProcess(), snapshotHandle);
+			for (auto& handle : threadHandles) {
+				CloseHandle(handle);
+			}
 			return false;
 		}
 	}
 	 //--------------------
 	SPDLOG_INFO("DetourUpdateThread successful for other threads.");
+
+	PssFreeSnapshot(GetCurrentProcess(), snapshotHandle);
 
 	if (!Monitor::attachHooks()) {
 		SPDLOG_ERROR("AttachHooks failed.");

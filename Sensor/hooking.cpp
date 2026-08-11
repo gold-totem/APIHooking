@@ -5,7 +5,11 @@
 #include "includes/hooking.h"
 
 #define CREATE_HOOK(functionName) \
-	TrueFuncPtrs::true##functionName = reinterpret_cast<p##functionName>(GetProcAddress(hNtdll, #functionName));
+	{ \
+		auto procAddress{ GetProcAddress(hNtdll, #functionName) }; \
+		if(procAddress == NULL ) return false; \
+		TrueFuncPtrs::true##functionName = reinterpret_cast<p##functionName>( procAddress ); \
+	}
 
 #define ATTACH_HOOK(functionName) \
 	isError |= DetourAttach(&(reinterpret_cast<PVOID&>(TrueFuncPtrs::true##functionName)), DetouredFunc::det##functionName)
