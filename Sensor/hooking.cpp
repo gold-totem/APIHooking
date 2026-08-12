@@ -7,7 +7,10 @@
 #define CREATE_HOOK(functionName) \
 	{ \
 		auto procAddress{ GetProcAddress(hNtdll, #functionName) }; \
-		if(procAddress == NULL ) return false; \
+		if(procAddress == NULL ){ \
+			SPDLOG_ERROR("[Hook] Couldn't find {} in ntdll", #functionName);\
+			return false; \
+		}\
 		TrueFuncPtrs::true##functionName = reinterpret_cast<p##functionName>( procAddress ); \
 	}
 
@@ -18,7 +21,7 @@
 
 namespace {
 
-	auto sensor = spdlog::get("Sensor");
+	std::shared_ptr<spdlog::logger> sensor{ nullptr };
 
 	using pLdrLoadDll = NTSTATUS
 		(NTAPI*)
@@ -40,7 +43,7 @@ namespace {
 			_In_ PCUNICODE_STRING DllName,
 			_Out_ PVOID* DllHandle
 		) {
-			if (sensor) sensor->info("LdrLoadDll");
+			if (sensor) sensor->info("LdrLoadDll, DllPath:{}", DllPath);
 			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
@@ -52,9 +55,18 @@ namespace Monitor {
 
 		SPDLOG_INFO("[Hook] createHooks called.");
 
+
+		sensor = spdlog::get("Sensor");
+
+		if (!sensor) {
+			SPDLOG_ERROR("[Hook]  Couldn't retrive logger");
+			return false;
+		}
+		SPDLOG_INFO("[Hook] createHooks called.");
+
 		HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
 		if (!hNtdll) {
-			SPDLOG_ERROR("Getting handle to ntdll failed with: {}", GetLastError());
+			SPDLOG_ERROR("[Hook] Getting handle to ntdll failed with: {}", GetLastError());
 			return false;
 		}
 
