@@ -295,7 +295,6 @@ namespace Injector {
         return true;
     }
 
-
     bool Injector::run() {
 
         // switch (config.injectorMode)
