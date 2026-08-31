@@ -1,4 +1,5 @@
 #include "config.h"
+#include <Windows.h>
 namespace Injector {
     class Injector {
 
@@ -31,8 +32,9 @@ namespace Injector {
 
         Injector(ProcConsts p64, ProcConsts p32, const Config::Config& c) :proc64(p64), proc32(p32), config(c) {}
 
-        bool inject_pid(DWORD pid);
-
+        bool injectPID(DWORD pid);
+        void modeOnce();
+        void modeCreate();
 
 
     };

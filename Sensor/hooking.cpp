@@ -8,7 +8,7 @@
 	{ \
 		auto procAddress{ GetProcAddress(hNtdll, #functionName) }; \
 		if(procAddress == NULL ){ \
-			SPDLOG_ERROR("[Hook] Couldn't find {} in ntdll", #functionName);\
+			SPDLOG_ERROR("[Hook] Couldn't find {} in ntdll", #functionName); \
 			return false; \
 		}\
 		TrueFuncPtrs::true##functionName = reinterpret_cast<p##functionName>( procAddress ); \
@@ -43,8 +43,9 @@ namespace {
 			_In_ PCUNICODE_STRING DllName,
 			_Out_ PVOID* DllHandle
 		) {
-			if (sensor) sensor->info("LdrLoadDll, DllPath:{}", DllPath);
-			
+			if (!sensor) { 
+				if(Monitor::initLogger()) sensor->info("LdrLoadDll, DllPath:{}", DllPath);
+			}			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
 	}
@@ -59,7 +60,7 @@ namespace Monitor {
 		sensor = spdlog::get("Sensor");
 
 		if (!sensor) {
-			SPDLOG_ERROR("[Hook]  Couldn't retrive logger");
+			SPDLOG_ERROR("[Hook] Couldn't retrive logger");
 			return false;
 		}
 		SPDLOG_INFO("[Hook] createHooks called.");

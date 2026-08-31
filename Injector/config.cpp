@@ -76,12 +76,14 @@ namespace Config {
         auto path64 = requireField<std::string>(*payload, "path_64", "payload_dll");
         auto path32 = requireField<std::string>(*payload, "path_32", "payload_dll");
         auto calleeName = requireField<std::string>(*payload, "callee_name", "payload_dll");
+        auto pathStartupDll = requireField<std::string>(*payload, "path_startup_dll", "payload_dll");
 
-        if (!path64 || !path32 || !calleeName) return std::nullopt;
+        if (!path64 || !path32 || !calleeName || !pathStartupDll) return std::nullopt;
 
         config.path64 = *path64;
         config.path32 = *path32;
         config.calleeName = *calleeName;
+        config.pathStartupDll = *pathStartupDll;
 
         const json* injector = requireNode(configJson, "injector", "root", &json::is_object);
         if (!injector) return std::nullopt;
@@ -92,9 +94,7 @@ namespace Config {
         if (*mode == "once") {
             config.injectorMode = InjectorMode::INJECT_ONCE;
         }
-        else if (*mode == "continuous") {
-            config.injectorMode = InjectorMode::INJECT_CONT;
-        }
+
         else if (*mode == "create") {
             config.injectorMode = InjectorMode::INJECT_CREATE;
         }
@@ -112,7 +112,7 @@ namespace Config {
                     spdlog::error("[Config] target_pids must contain only integers");
                     return std::nullopt;
                 }
-                config.processID.push_back(pid.get<long>());
+                config.processIDs.push_back(pid.get<long>());
             }
             return config;
         }
@@ -131,10 +131,6 @@ namespace Config {
         if (config.injectorMode == InjectorMode::INJECT_CREATE) {
             return config;
         }
-
-        auto interval = requireField<int>(*injector, "search_intervel_seconds", "injector");
-        if (!interval) return std::nullopt;
-        config.searchIntervalSeconds = *interval;
 
         return config;
     }

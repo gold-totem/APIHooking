@@ -18,7 +18,6 @@ target_sources( Sensor
 
     FILE_SET SOURCES
     FILES
-	dllmain.cpp
     	exports.cpp
     	hooking.cpp
     	pch.cpp
@@ -27,6 +26,41 @@ target_sources( Sensor
 target_compile_features(Sensor PRIVATE cxx_std_20)
 
 target_link_libraries(Sensor PRIVATE
+    spdlog::spdlog
+    ${DETOURS_LIBRARY}
+    phnt::phnt
+)
+
+
+add_library(SensorStartup SHARED)
+
+target_sources( SensorStartup
+    PRIVATE
+
+    FILE_SET HEADERS
+    BASE_DIRS includes
+    FILES
+	includes/framework.h
+	includes/pch.h
+    	includes/hooking.h
+)
+
+target_include_directories(SensorStartup PRIVATE ${DETOURS_INCLUDE_DIRS})
+
+target_sources( SensorStartup
+    PRIVATE
+
+    FILE_SET SOURCES
+    FILES
+	dllmain.cpp
+    	exports.cpp
+    	hooking.cpp
+    	pch.cpp
+)
+
+target_compile_features(SensorStartup PRIVATE cxx_std_20)
+
+target_link_libraries(SensorStartup PRIVATE
     spdlog::spdlog
     ${DETOURS_LIBRARY}
     phnt::phnt

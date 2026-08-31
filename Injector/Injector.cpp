@@ -24,35 +24,31 @@ namespace {
         BIT_INVALID
     };
 
-    HANDLE getProcessHandle(std::wstring_view processName) {
-        PWTS_PROCESS_INFO pProcessInfo{ nullptr };
+    DWORD getProcessID(std::string_view processName) {
+        PWTS_PROCESS_INFOA pProcessInfo{ nullptr };
         DWORD count{ 0 };
-        if (!WTSEnumerateProcessesW(
+        if (!WTSEnumerateProcessesA(
             WTS_CURRENT_SERVER_HANDLE,
             NULL,
             1,
             &pProcessInfo,
             &count
         )) {
-            std::wcerr << L"WTSEnumerateProcessesW failed: " << GetLastError() << 'L\n';
-            return INVALID_HANDLE_VALUE;
+            spdlog::error("[Injector] Process enumeration failed");
+            return 0;
         }
         for (DWORD i{ 0 }; i < count; i++) {
 
-            if (_wcsicmp(processName.data(), pProcessInfo[i].pProcessName) == 0) {
+            if (_stricmp(processName.data(), pProcessInfo[i].pProcessName) == 0) {
 
-                HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pProcessInfo[i].ProcessId);
-
-                if (!hProc) {
-                    std::wcerr << "OpenProcess failed: " << GetLastError();
-                }
-                return hProc;
+                WTSFreeMemory(pProcessInfo);
+                return pProcessInfo[i].ProcessId;
             }
         }
 
         WTSFreeMemory(pProcessInfo);
 
-        return INVALID_HANDLE_VALUE;
+        return 0;
     }
     Bitness getProcessBitType(HANDLE hProcess) {
         if (!hProcess) {
@@ -195,6 +191,9 @@ namespace {
         return NULL;
     }
 
+
+    
+
 }
 namespace Injector {
 
@@ -228,7 +227,7 @@ namespace Injector {
         return Injector(p64, p32, config);
     }
 
-    bool Injector::inject_pid(DWORD pid) {
+    bool Injector::injectPID(DWORD pid) {
 
 
         HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
@@ -294,10 +293,56 @@ namespace Injector {
         spdlog::info("Successfully injected");
         return true;
     }
+    void Injector::modeOnce() {
+        for (auto pid : config.processIDs) {
+            injectPID(pid);
+        }
+
+        for (const auto& processCmd : config.processName) {
+            auto position = processCmd.find(" ");
+
+            auto pid = getProcessID((position != std::string::npos) ? processCmd.substr(0, position) : processCmd);
+
+            injectPID(pid);
+            
+        }
+
+    }
+
+    void Injector::modeCreate() {
+
+        for (const auto& processCmd : config.processName) {
+            
+            DetourCreateProcessWithDllEx(
+                NULL,
+                processCmd.c_str(),
+
+            )
+
+        }
+
+    }
+
 
     bool Injector::run() {
 
-        // switch (config.injectorMode)
+        switch (config.injectorMode) {
+
+        case Config::InjectorMode::INJECT_ONCE:
+            modeOnce();
+            break;
+
+        case Config::InjectorMode::INJECT_CREATE:
+            modeCreate();
+            break;
+
+        default:
+            spdlog::error("[Injector] Invalid injector mode received");
+            return false;
+
+        }
+
+        return true;
 
     }
 

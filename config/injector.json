@@ -2,7 +2,8 @@
     "payload_dll":{
         "path_64":"foo64.dll",
         "path_32":"foo64.dll",
-        "callee_name":"hookProc"
+        "callee_name":"hookProc",
+        "path_startup_dll":"foo_startup"
     },
     "injector":{
         "mode":"once/continous/create",
@@ -16,7 +17,7 @@
         "exename2 -command ",
         "ALL_PROCS"
         ],
-        "search_intervel_seconds": 60
+        "timeout": 60
     },
     "log_level":"debug"
 }
