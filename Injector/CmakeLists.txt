@@ -26,4 +26,5 @@ target_compile_features(Injector PRIVATE cxx_std_20)
 target_link_libraries(Injector PRIVATE
     spdlog::spdlog
     nlohmann_json::nlohmann_json
+     ${DETOURS_LIBRARY}
 )

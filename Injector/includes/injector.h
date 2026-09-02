@@ -1,3 +1,4 @@
+#pragma once
 #include "config.h"
 #include <Windows.h>
 namespace Injector {

@@ -11,8 +11,6 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         return TRUE;
     }
 
-   
-
     switch (ul_reason_for_call)
     {
     case DLL_PROCESS_ATTACH:
@@ -20,7 +18,7 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         DetourRestoreAfterWith();
         DetourTransactionBegin();
         Monitor::createHooks();
-
+        DetourUpdateThread(GetCurrentThread());
         Monitor::createHooks();
         DetourTransactionCommit();
         break;

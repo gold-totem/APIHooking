@@ -47,7 +47,7 @@ namespace {
 
 }
 namespace Config {
-    std::optional<Config> getConfig(std::string_view configPath) {
+    std::optional<Config> Config::getConfig(std::string_view configPath) {
         std::ifstream ifFile(configPath.data());
         if (!ifFile.is_open()) {
             spdlog::error("[Config] Error opening config file");

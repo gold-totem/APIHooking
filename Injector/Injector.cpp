@@ -9,6 +9,7 @@
 #include <psapi.h>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include <detours/detours.h>
 
 #include "includes/config.h"
 #include "includes/injector.h"
@@ -313,11 +314,33 @@ namespace Injector {
 
         for (const auto& processCmd : config.processName) {
             
-            DetourCreateProcessWithDllEx(
-                NULL,
-                processCmd.c_str(),
+            STARTUPINFOA stInfo{};
+            PROCESS_INFORMATION procInfo{};
 
-            )
+            std::vector<char> cmdLine(processCmd.begin(), processCmd.end());
+
+            if (DetourCreateProcessWithDllExA(
+                NULL,
+                cmdLine.data(),
+                NULL,
+                NULL,
+                FALSE,
+                0,
+                NULL,
+                NULL,
+                &stInfo,
+                &procInfo,
+                config.pathStartupDll.c_str(),
+                NULL
+            )) {
+                spdlog::warn("[Injector] Invalid injector mode received");
+            }
+
+            WaitForSingleObject(procInfo.hProcess, INFINITE);
+            CloseHandle(procInfo.hProcess);
+            CloseHandle(procInfo.hThread);
+
+            spdlog::info("[Injector] Created and injected into process{}", processCmd);
 
         }
 

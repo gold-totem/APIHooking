@@ -1,3 +1,11 @@
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(ARCH_SUFFIX "64")
+else(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(ARCH_SUFFIX "32")
+endif()
+
+set(OUTPUT_DIR "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
+
 add_library(Sensor SHARED)
 
 target_sources( Sensor
@@ -31,6 +39,11 @@ target_link_libraries(Sensor PRIVATE
     phnt::phnt
 )
 
+set_target_properties(Sensor PROPERTIES
+    OUTPUT_NAME "Sensor${ARCH_SUFFIX}"
+    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+)
 
 add_library(SensorStartup SHARED)
 
@@ -64,4 +77,10 @@ target_link_libraries(SensorStartup PRIVATE
     spdlog::spdlog
     ${DETOURS_LIBRARY}
     phnt::phnt
+)
+
+set_target_properties(SensorStartup PROPERTIES
+    OUTPUT_NAME "SensorStartup${ARCH_SUFFIX}"
+    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 )

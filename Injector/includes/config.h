@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>
 #include <string>
 #include <optional>
@@ -18,6 +19,7 @@ namespace Config {
         std::string calleeName;
         std::string pathStartupDll;
         std::string logLevel;
+        static std::optional<Config> getConfig(std::string_view configPath);
     };
-    static std::optional<Config> getConfig(std::string_view configPath);
+    
 }

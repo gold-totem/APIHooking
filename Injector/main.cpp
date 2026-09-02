@@ -4,7 +4,7 @@
 
 int main(int argc, char* argv[]) {
 
-	auto config = Config::getConfig("./config");
+	auto config = Config::Config::getConfig("./config");
 
 	if (!config) {
 		return EXIT_FAILURE;
