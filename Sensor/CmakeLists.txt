@@ -4,8 +4,6 @@ else(CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(ARCH_SUFFIX "32")
 endif()
 
-set(OUTPUT_DIR "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
-
 add_library(Sensor SHARED)
 
 target_sources( Sensor
@@ -35,13 +33,14 @@ target_compile_features(Sensor PRIVATE cxx_std_20)
 
 target_link_libraries(Sensor PRIVATE
     spdlog::spdlog
-    ${DETOURS_LIBRARY}
+    $<$<CONFIG:Debug>:${DETOURS_LIBRARY_DEBUG}>
+    $<$<NOT:$<CONFIG:Debug>>:${DETOURS_LIBRARY_RELEASE}>
     phnt::phnt
+    Userenv.lib
 )
 
 set_target_properties(Sensor PROPERTIES
     OUTPUT_NAME "Sensor${ARCH_SUFFIX}"
-    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 )
 
@@ -75,12 +74,13 @@ target_compile_features(SensorStartup PRIVATE cxx_std_20)
 
 target_link_libraries(SensorStartup PRIVATE
     spdlog::spdlog
-    ${DETOURS_LIBRARY}
+    $<$<CONFIG:Debug>:${DETOURS_LIBRARY_DEBUG}>
+    $<$<NOT:$<CONFIG:Debug>>:${DETOURS_LIBRARY_RELEASE}>
     phnt::phnt
+    Userenv.lib
 )
 
 set_target_properties(SensorStartup PROPERTIES
     OUTPUT_NAME "SensorStartup${ARCH_SUFFIX}"
-    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 )

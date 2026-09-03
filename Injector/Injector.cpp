@@ -3,7 +3,6 @@
 #include <string_view>
 #include <cwchar>
 #include <cwctype>
-#include <iostream>
 #include <cstring>
 #include <vector>
 #include <psapi.h>
@@ -77,12 +76,12 @@ namespace {
 
         HMODULE hDll = LoadLibraryA(dll64Path.data());
         if (!hDll) {
-            std::cerr << "LoadLibraryA failed: " << GetLastError() << '\n';
+            spdlog::error("[Injector] LoadLibraryA failed with{}",GetLastError());
             return 0;
         }
         FARPROC initHooks{ GetProcAddress(hDll, functionName.data()) };
         if (!initHooks) {
-            std::cerr << "GetProcAddress failed for initHooks with error: " << GetLastError() << '\n';
+            spdlog::error("[Injector] GetProcAddress failed for initHooks with error {}", GetLastError());
             FreeLibrary(hDll);
             return 0;
         }

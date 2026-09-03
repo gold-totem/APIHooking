@@ -6,49 +6,50 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess=@1,NONAME")
+#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess,@1,NONAME")
+namespace Monitor{
 
-bool initLogger() {
+	bool initLogger() {
 
-	char processName[MAX_PATH];
-	if (GetModuleFileNameA(nullptr, processName, MAX_PATH) == 0) {
-		return false;
+		char processName[MAX_PATH];
+		if (GetModuleFileNameA(nullptr, processName, MAX_PATH) == 0) {
+			return false;
+		}
+
+		char path[MAX_PATH];
+
+		memset(path, 0, sizeof(path));
+
+		if (!ExpandEnvironmentStringsForUserA(
+			NULL,
+			"%PROGRAMDATA%",
+			path,
+			sizeof(path)
+		)) {
+			return false;
+		}
+
+		auto now = std::chrono::system_clock::now();
+		auto now_seconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+
+		std::string time = std::format("{:%Y-%m-%d_%H-%M-%S}", now_seconds);
+
+		std::string log_path = path;
+
+		log_path += '\\' + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
+
+		auto sensor = spdlog::basic_logger_mt("Sensor", log_path, true);
+		spdlog::set_level(spdlog::level::info);
+
+		return true;
 	}
-
-	char path[MAX_PATH];
-
-	memset(path, 0, sizeof(path));
-
-	if (!ExpandEnvironmentStringsForUserA(
-		NULL,
-		"%PROGRAMDATA%",
-		path,
-		sizeof(path)
-	)) {
-		return false;
-	}
-
-	auto now = std::chrono::system_clock::now();
-	auto now_seconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
-
-	std::string time = std::format("{:%Y-%m-%d_%H-%M-%S}", now_seconds);
-
-	std::string log_path = path;
-
-	log_path += '\\' + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
-
-	auto sensor = spdlog::basic_logger_mt("Sensor", log_path, true);
-	spdlog::set_level(spdlog::level::info);
-
-	return true;
 }
-
 extern "C" __declspec(dllexport) bool hookProc() {
 
 
 	SPDLOG_INFO("Running hookProc.");
 
-	if (!initLogger()) {
+	if (!Monitor::initLogger()) {
 		SPDLOG_ERROR("Failed initializing logger.");
 	}
 

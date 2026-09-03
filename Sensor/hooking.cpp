@@ -1,3 +1,6 @@
+#include <spdlog/fmt/fmt.h>
+//#define SPDLOG_WCHAR_TO_UTF8_SUPPORT
+
 #include <phnt_windows.h>
 #include <phnt.h>
 
@@ -44,7 +47,7 @@ namespace {
 			_Out_ PVOID* DllHandle
 		) {
 			if (!sensor) { 
-				if(Monitor::initLogger()) sensor->info("LdrLoadDll, DllPath:{}", DllPath);
+				if(Monitor::initLogger()) sensor->info("LdrLoadDll, DllPath:{}", fmt::ptr(DllName->Buffer));
 			}			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}

@@ -6,7 +6,7 @@
         "path_startup_dll":"foo_startup"
     },
     "injector":{
-        "mode":"once/continous/create",
+        "mode":"once/create",
         "target_pids":[
             123,
             321
@@ -16,8 +16,7 @@
         "exename1",
         "exename2 -command ",
         "ALL_PROCS"
-        ],
-        "timeout": 60
+        ]
     },
     "log_level":"debug"
 }
