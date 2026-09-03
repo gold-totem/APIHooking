@@ -41,6 +41,7 @@ target_link_libraries(Sensor PRIVATE
 
 set_target_properties(Sensor PROPERTIES
     OUTPUT_NAME "Sensor${ARCH_SUFFIX}"
+    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 )
 
@@ -82,5 +83,6 @@ target_link_libraries(SensorStartup PRIVATE
 
 set_target_properties(SensorStartup PROPERTIES
     OUTPUT_NAME "SensorStartup${ARCH_SUFFIX}"
+    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
 )
