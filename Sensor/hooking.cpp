@@ -18,7 +18,7 @@
 	}
 
 #define ATTACH_HOOK(functionName) \
-	isError |= DetourAttach(&(reinterpret_cast<PVOID&>(TrueFuncPtrs::true##functionName)), DetouredFunc::det##functionName)
+	isError |= static_cast<bool>(DetourAttach(&(reinterpret_cast<PVOID&>(TrueFuncPtrs::true##functionName)), DetouredFunc::det##functionName))
 	
 
 

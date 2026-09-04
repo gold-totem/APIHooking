@@ -73,7 +73,7 @@ namespace {
     }
 
     uintptr_t getDelta64(std::string_view dll64Path, std::string_view functionName) {
-
+        //TODO: PE parsing for 64 bit too
         HMODULE hDll = LoadLibraryA(dll64Path.data());
         if (!hDll) {
             spdlog::error("[Injector] LoadLibraryA failed with{}",GetLastError());

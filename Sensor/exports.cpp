@@ -6,7 +6,12 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess,@1,NONAME")
+//TODO: use a .def file instead
+#if defined(_M_IX86)
+	#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess=_DetourFinishHelperProcess@16,@1,NONAME")
+#elif defined(_M_X64)
+	#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess,@1,NONAME")
+#endif
 namespace Monitor{
 
 	bool initLogger() {

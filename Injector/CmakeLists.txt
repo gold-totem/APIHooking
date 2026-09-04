@@ -32,4 +32,5 @@ target_link_libraries(Injector PRIVATE
 
 set_target_properties(Injector PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )

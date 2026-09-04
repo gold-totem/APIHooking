@@ -43,6 +43,7 @@ set_target_properties(Sensor PROPERTIES
     OUTPUT_NAME "Sensor${ARCH_SUFFIX}"
     RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )
 
 add_library(SensorStartup SHARED)
@@ -85,4 +86,5 @@ set_target_properties(SensorStartup PROPERTIES
     OUTPUT_NAME "SensorStartup${ARCH_SUFFIX}"
     RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )

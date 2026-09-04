@@ -5,6 +5,16 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
         CACHE STRING "Vcpkg toolchain file")
 endif()
 
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    if(CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
+        set(VCPKG_TARGET_TRIPLET "x86-windows-static"
+            CACHE STRING "Vcpkg target triplet")
+    else()
+        set(VCPKG_TARGET_TRIPLET "x64-windows-static"
+            CACHE STRING "Vcpkg target triplet")
+    endif()
+endif()
+
 set(OUTPUT_DIR "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
 
 project(APIHooking LANGUAGES CXX)
