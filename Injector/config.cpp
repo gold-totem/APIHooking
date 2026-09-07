@@ -49,7 +49,7 @@ namespace {
 namespace Config {
     std::optional<Config> Config::getConfig(std::string_view configPath) {
 
-        spdlog::error("[Config] configPath: {}", configPath);
+        spdlog::debug("[Config] configPath: {}", configPath);
 
         std::ifstream ifFile(configPath.data());
         if (!ifFile.is_open()) {
@@ -79,12 +79,14 @@ namespace Config {
         auto path64 = requireField<std::string>(*payload, "path_64", "payload_dll");
         auto path32 = requireField<std::string>(*payload, "path_32", "payload_dll");
         auto calleeName = requireField<std::string>(*payload, "callee_name", "payload_dll");
+        auto startupDLLPath = requireField<std::string>(*payload, "startup_dll_path", "payload_dll");
 
-        if (!path64 || !path32 || !calleeName) return std::nullopt;
+        if (!path64 || !path32 || !calleeName || !startupDLLPath) return std::nullopt;
 
         config.path64 = *path64;
         config.path32 = *path32;
         config.calleeName = *calleeName;
+        config.startupDLLPath = *startupDLLPath;
 
         const json* injector = requireNode(configJson, "injector", "root", &json::is_object);
         if (!injector) return std::nullopt;

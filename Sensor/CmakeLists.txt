@@ -45,3 +45,49 @@ set_target_properties(Sensor PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )
+
+
+add_library(SensorStartup SHARED)
+
+target_sources( SensorStartup
+    PRIVATE
+
+    FILE_SET HEADERS
+    BASE_DIRS includes
+    FILES
+	includes/framework.h
+	includes/pch.h
+    	includes/hooking.h
+)
+
+target_include_directories(SensorStartup PRIVATE ${DETOURS_INCLUDE_DIRS})
+
+target_sources( SensorStartup
+    PRIVATE
+
+    FILE_SET SOURCES
+    FILES
+        dllmain.cpp
+    	exports.cpp
+    	hooking.cpp
+    	pch.cpp
+	export64.def
+	export32.def
+)
+
+target_compile_features(SensorStartup PRIVATE cxx_std_20)
+
+target_link_libraries(SensorStartup PRIVATE
+    spdlog::spdlog
+    $<$<CONFIG:Debug>:${DETOURS_LIBRARY_DEBUG}>
+    $<$<NOT:$<CONFIG:Debug>>:${DETOURS_LIBRARY_RELEASE}>
+    phnt::phnt
+    Userenv.lib
+)
+
+set_target_properties(SensorStartup PROPERTIES
+    OUTPUT_NAME "SensorStartup${ARCH_SUFFIX}"
+    RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_DIR}"
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)

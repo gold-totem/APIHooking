@@ -8,7 +8,7 @@
 #include <psapi.h>
 #include <optional>
 #include <spdlog/spdlog.h>
-
+#include <detours/detours.h>
 #include "includes/config.h"
 #include "includes/injector.h"
 
@@ -158,12 +158,13 @@ namespace {
 
         DWORD sizeNeeded = 0;
         if (!EnumProcessModulesEx(hProcess, nullptr, 0, &sizeNeeded, flags)) {
+            spdlog::error("EnumProcessModulesEx retrive: {}", GetLastError());
+        }
 
-            spdlog::error("[Injector] EnumProcessModulesEx failed (get size): {}", GetLastError());
-
+        if (sizeNeeded == 0) { 
+            spdlog::error("Couldn't retrive required buffer size to enumerate modules for {}", moduleName);
             return NULL;
         }
-        if (sizeNeeded == 0) return NULL;
 
         size_t count = sizeNeeded / sizeof(HMODULE);
         std::vector<HMODULE> modules(count);
@@ -186,6 +187,7 @@ namespace {
                 return modules[i];
             }
         }
+        spdlog::error("Could not find module {} in the target process", moduleName);
         return NULL;
     }
 
@@ -233,6 +235,7 @@ namespace Injector {
             spdlog::error("[Injector] Opening target failed with: {}", GetLastError());
             return false;
         }
+        spdlog::info("[Injector] Target process opened successfully");
 
         auto bitness = getProcessBitType(hProcess);
 
@@ -252,6 +255,8 @@ namespace Injector {
             return false;
         }
 
+        spdlog::info("[Injector] Allocated memory in target process successfully");
+
         SIZE_T writtenBytes{ 0 };
         BOOL writeProcessMemory = WriteProcessMemory(hProcess, writtenAddress, pProcConst->dllPath.data(), pProcConst->dllPath.length() + 1, &writtenBytes);
         if (!writeProcessMemory || (writtenBytes < (pProcConst->dllPath.length() + 1))) {
@@ -260,7 +265,16 @@ namespace Injector {
             return false;
         }
 
-        uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(getModuleHandle("KERNEL32.DLL", hProcess, bitness)) + pProcConst->loadLibraryDelta };
+        spdlog::info("[Injector] Wrote into target process successfully");
+
+        auto hKernel32{getModuleHandle("KERNEL32.DLL", hProcess, bitness)};
+
+        if (hKernel32 == NULL) {
+            CloseHandle(hProcess);
+            return false;
+        }
+        uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(hKernel32) + pProcConst->loadLibraryDelta };
+        
         HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddress), writtenAddress, 0, NULL);
         if (!hThread) {
             spdlog::error("[Injector] LoadLibrary thread creation failed with: {}", GetLastError());
@@ -268,10 +282,21 @@ namespace Injector {
             return false;
         }
 
+        spdlog::info("[Injector] Called LoadLibrary successfully");
+
         WaitForSingleObject(hThread, INFINITE);
         CloseHandle(hThread);
 
-        uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(getModuleHandle(pProcConst->dllPath, hProcess, bitness)) + pProcConst->calleeDelta };
+
+        auto hDll{ getModuleHandle(pProcConst->dllPath.substr(pProcConst->dllPath.find_last_of('\\') + 1), hProcess, bitness)};
+
+        if (hDll == NULL) {
+            CloseHandle(hProcess);
+            return false;
+        }
+
+
+        uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(hDll) + pProcConst->calleeDelta };
         if (!initHooksAddress) {
             spdlog::error("[Injector] Failed to retrieve callee delta in target");
             return false;
@@ -279,10 +304,14 @@ namespace Injector {
 
         HANDLE hInitThread = CreateRemoteThread(hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(initHooksAddress), NULL, 0, NULL);
         if (!hInitThread) {
-            spdlog::error("[Injector] Invloking callee failed with: {}", GetLastError());
+            spdlog::error("[Injector] Invoking callee failed with: {}", GetLastError());
             CloseHandle(hProcess);
             return false;
         }
+
+
+        spdlog::info("[Injector] Called {} successfully", config.calleeName);
+
         WaitForSingleObject(hInitThread, INFINITE);
         CloseHandle(hInitThread);
 
@@ -309,16 +338,29 @@ namespace Injector {
 
     void Injector::modeCreate() {
 
+        spdlog::info("[Injector] in mode create");
         for (const auto& processCmd : config.processName) {
             
             STARTUPINFOA stInfo{};
             PROCESS_INFORMATION procInfo{};
 
-            std::vector<char> cmdLine(processCmd.begin(), processCmd.end());
+            spdlog::info("[Injector] Creating process for: {}", processCmd);
 
-            if (CreateProcessA(
-                NULL,
-                cmdLine.data(),
+
+            auto appNameIndex{ processCmd.find(".exe") + 4 };
+            std::string appName{ processCmd.substr(0, appNameIndex) };
+            std::vector<char> cmdLine;
+
+            for (auto index{ appNameIndex }; index < processCmd.length(); ++index) {
+                cmdLine.push_back(processCmd.at(index));
+            }
+
+
+            
+
+            if (!DetourCreateProcessWithDllExA(
+                appName.c_str(),
+                (appNameIndex == processCmd.length()?NULL: cmdLine.data()),
                 NULL,
                 NULL,
                 FALSE,
@@ -326,22 +368,21 @@ namespace Injector {
                 NULL,
                 NULL,
                 &stInfo,
-                &procInfo
+                &procInfo,
+                config.startupDLLPath.c_str(),
+                NULL
             )) {
-                spdlog::warn("[Injector] Failed creating process for: {}", processCmd);
+                spdlog::warn("[Injector] Failed creating process for {}, failed with error: {}", processCmd, GetLastError());
+                continue;
             }
 
-            WaitForSingleObject(procInfo.hProcess, INFINITE);
+            spdlog::info("[Injector] Created process for: {} successfully", processCmd);
 
-            injectPID(procInfo.dwProcessId);
-
-            ResumeThread(procInfo.hThread);
 
             CloseHandle(procInfo.hProcess);
             CloseHandle(procInfo.hThread);
 
 
-            spdlog::info("[Injector] Created and injected into process: {}", processCmd);
 
         }
 

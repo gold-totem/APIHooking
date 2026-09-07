@@ -11,7 +11,7 @@ vcpkg
 build steps:
 clone
 
-cmake -B build -G "Visual Studio 18 2026" .
+cmake -B build -G "Visual Studio 18 2026" 
 
 cmake --build build --config Release
 
@@ -19,5 +19,5 @@ cmake --build build --config Release
 
 cmake -B build32 -G "Visual Studio 18 2026" -A Win32 .
 
-cmake --build build32 --config Release --target Sensor SensorStartup
+cmake --build build32 --target Sensor SensorStartup --config Release
 

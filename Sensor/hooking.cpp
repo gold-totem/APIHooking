@@ -68,6 +68,8 @@ NtCreateUserProcess
 namespace Monitor {
 	bool createHooks() {
 
+		Monitor::initLogger();
+
 		SPDLOG_INFO("[Hook] createHooks called.");
 
 

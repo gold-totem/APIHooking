@@ -17,6 +17,7 @@ namespace Config {
         std::string path64;
         std::string path32;
         std::string calleeName;
+        std::string startupDLLPath;
         std::string logLevel;
         static std::optional<Config> getConfig(std::string_view configPath);
     };
