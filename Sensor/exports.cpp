@@ -6,12 +6,6 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-//TODO: use a .def file instead
-#if defined(_M_IX86)
-	#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess=_DetourFinishHelperProcess@16,@1,NONAME")
-#elif defined(_M_X64)
-	#pragma comment(linker, "/EXPORT:DetourFinishHelperProcess,@1,NONAME")
-#endif
 namespace Monitor{
 
 	bool initLogger() {
@@ -41,7 +35,7 @@ namespace Monitor{
 
 		std::string log_path = path;
 
-		log_path += '\\' + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
+		log_path += "\\APIHooking\\" + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
 
 		auto sensor = spdlog::basic_logger_mt("Sensor", log_path, true);
 		spdlog::set_level(spdlog::level::info);

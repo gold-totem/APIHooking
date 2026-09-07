@@ -5,16 +5,15 @@
 
 int main(int argc, char* argv[]) {
 
-	std::string_view configPath{ "./config" };
 
-	if ((std::strcmp(argv[1], "-c") == 0) ||
-		(std::strcmp(argv[1], "--config") == 0)) {
-		configPath = argv[2];
+	if (argc < 3 || (std::strcmp(argv[1], "-c") != 0)) {
+		std::cerr << "Usage:\n\t" << argv[0] << " -c <config_path>\n";
+		return EXIT_FAILURE;
 	}
-	auto config = Config::Config::getConfig(configPath);
+
+	auto config = Config::Config::getConfig(argv[2]);
 
 	if (!config) {
-		std::cerr << "Unable to load config\n";
 		return EXIT_FAILURE;
 	}
 

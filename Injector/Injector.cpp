@@ -8,11 +8,9 @@
 #include <psapi.h>
 #include <optional>
 #include <spdlog/spdlog.h>
-#include <detours/detours.h>
 
 #include "includes/config.h"
 #include "includes/injector.h"
-#pragma comment(lib, "Wtsapi32.lib")
 
 namespace {
     
@@ -318,28 +316,32 @@ namespace Injector {
 
             std::vector<char> cmdLine(processCmd.begin(), processCmd.end());
 
-            if (DetourCreateProcessWithDllExA(
+            if (CreateProcessA(
                 NULL,
                 cmdLine.data(),
                 NULL,
                 NULL,
                 FALSE,
-                0,
+                CREATE_SUSPENDED,
                 NULL,
                 NULL,
                 &stInfo,
-                &procInfo,
-                config.pathStartupDll.c_str(),
-                NULL
+                &procInfo
             )) {
-                spdlog::warn("[Injector] Invalid injector mode received");
+                spdlog::warn("[Injector] Failed creating process for: {}", processCmd);
             }
 
             WaitForSingleObject(procInfo.hProcess, INFINITE);
+
+            injectPID(procInfo.dwProcessId);
+
+            ResumeThread(procInfo.hThread);
+
             CloseHandle(procInfo.hProcess);
             CloseHandle(procInfo.hThread);
 
-            spdlog::info("[Injector] Created and injected into process{}", processCmd);
+
+            spdlog::info("[Injector] Created and injected into process: {}", processCmd);
 
         }
 
@@ -347,6 +349,8 @@ namespace Injector {
 
 
     bool Injector::run() {
+
+        spdlog::info("[Injector] running injector");
 
         switch (config.injectorMode) {
 

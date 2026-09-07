@@ -48,6 +48,9 @@ namespace {
 }
 namespace Config {
     std::optional<Config> Config::getConfig(std::string_view configPath) {
+
+        spdlog::error("[Config] configPath: {}", configPath);
+
         std::ifstream ifFile(configPath.data());
         if (!ifFile.is_open()) {
             spdlog::error("[Config] Error opening config file");
@@ -76,14 +79,12 @@ namespace Config {
         auto path64 = requireField<std::string>(*payload, "path_64", "payload_dll");
         auto path32 = requireField<std::string>(*payload, "path_32", "payload_dll");
         auto calleeName = requireField<std::string>(*payload, "callee_name", "payload_dll");
-        auto pathStartupDll = requireField<std::string>(*payload, "path_startup_dll", "payload_dll");
 
-        if (!path64 || !path32 || !calleeName || !pathStartupDll) return std::nullopt;
+        if (!path64 || !path32 || !calleeName) return std::nullopt;
 
         config.path64 = *path64;
         config.path32 = *path32;
         config.calleeName = *calleeName;
-        config.pathStartupDll = *pathStartupDll;
 
         const json* injector = requireNode(configJson, "injector", "root", &json::is_object);
         if (!injector) return std::nullopt;
@@ -132,6 +133,7 @@ namespace Config {
             return config;
         }
 
+        spdlog::info("Config created");
         return config;
     }
 }

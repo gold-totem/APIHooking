@@ -27,7 +27,8 @@ target_link_libraries(Injector PRIVATE
     spdlog::spdlog
     nlohmann_json::nlohmann_json
     $<$<CONFIG:Debug>:${DETOURS_LIBRARY_DEBUG}>
-    $<$<NOT:$<CONFIG:Debug>>:${DETOURS_LIBRARY_RELEASE}>    
+    $<$<NOT:$<CONFIG:Debug>>:${DETOURS_LIBRARY_RELEASE}>
+    Wtsapi32.lib
 )
 
 set_target_properties(Injector PROPERTIES

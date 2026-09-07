@@ -1,5 +1,4 @@
 #include <spdlog/fmt/fmt.h>
-//#define SPDLOG_WCHAR_TO_UTF8_SUPPORT
 
 #include <phnt_windows.h>
 #include <phnt.h>
@@ -23,6 +22,18 @@
 
 
 namespace {
+	/*
+	NtOpenProcess()
+NtAllocateVirtualMemoryEx()
+NtWriteVirtualMemory()
+NtCreateThreadEx()
+NtQueueApcThread
+NtMapViewOfSection
+NtQueryInformationProcess
+NtSuspendProcess / NtResumeProcess
+NtCreateUserProcess
+
+	*/
 
 	std::shared_ptr<spdlog::logger> sensor{ nullptr };
 
@@ -47,7 +58,7 @@ namespace {
 			_Out_ PVOID* DllHandle
 		) {
 			if (!sensor) { 
-				if(Monitor::initLogger()) sensor->info("LdrLoadDll, DllPath:{}", fmt::ptr(DllName->Buffer));
+				sensor->info("LdrLoadDll, DllPath:{}", fmt::ptr(DllName->Buffer));
 			}			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
