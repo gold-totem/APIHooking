@@ -23,6 +23,7 @@ namespace {
     };
 
     DWORD getProcessID(std::string_view processName) {
+
         PWTS_PROCESS_INFOA pProcessInfo{ nullptr };
         DWORD count{ 0 };
         if (!WTSEnumerateProcessesA(
@@ -38,9 +39,9 @@ namespace {
         for (DWORD i{ 0 }; i < count; i++) {
 
             if (_stricmp(processName.data(), pProcessInfo[i].pProcessName) == 0) {
-
+                auto pid{ pProcessInfo[i].ProcessId };
                 WTSFreeMemory(pProcessInfo);
-                return pProcessInfo[i].ProcessId;
+                return pid;
             }
         }
 
@@ -200,6 +201,7 @@ namespace Injector {
 
     std::optional<Injector> Injector::get(const Config::Config& config) {
 
+        //TODO: expand env for these 2
         constexpr std::string_view kernel32DLL{ "C:\\WINDOWS\\System32\\KERNEL32.DLL" };
         constexpr std::string_view woWKernel32DLL{ "C:\\WINDOWS\\SysWOW64\\KERNEL32.DLL" };
         constexpr std::string_view loadLibraryName{ "LoadLibraryA" };
@@ -245,9 +247,9 @@ namespace Injector {
             return false;
         }
 
-        const ProcConsts* const pProcConst{ (bitness == Bitness::BIT_32)? &proc32 : &proc64 };
+        const ProcConsts& pProcConst{ (bitness == Bitness::BIT_32)? proc32 : proc64 };
 
-        LPVOID writtenAddress = VirtualAllocEx(hProcess, NULL, pProcConst->dllPath.length() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        LPVOID writtenAddress = VirtualAllocEx(hProcess, NULL, pProcConst.dllPath.length() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
         if (!writtenAddress) {
             spdlog::error("[Injector] Allocating memory in target failed with: {}", GetLastError());
@@ -258,8 +260,8 @@ namespace Injector {
         spdlog::info("[Injector] Allocated memory in target process successfully");
 
         SIZE_T writtenBytes{ 0 };
-        BOOL writeProcessMemory = WriteProcessMemory(hProcess, writtenAddress, pProcConst->dllPath.data(), pProcConst->dllPath.length() + 1, &writtenBytes);
-        if (!writeProcessMemory || (writtenBytes < (pProcConst->dllPath.length() + 1))) {
+        BOOL writeProcessMemory = WriteProcessMemory(hProcess, writtenAddress, pProcConst.dllPath.data(), pProcConst.dllPath.length() + 1, &writtenBytes);
+        if (!writeProcessMemory || (writtenBytes < (pProcConst.dllPath.length() + 1))) {
             spdlog::error("[Injector] Writing in target's memory failed with: {}", GetLastError());
             CloseHandle(hProcess);
             return false;
@@ -273,7 +275,7 @@ namespace Injector {
             CloseHandle(hProcess);
             return false;
         }
-        uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(hKernel32) + pProcConst->loadLibraryDelta };
+        uintptr_t loadLibraryAddress{ reinterpret_cast<uintptr_t>(hKernel32) + pProcConst.loadLibraryDelta };
         
         HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddress), writtenAddress, 0, NULL);
         if (!hThread) {
@@ -288,7 +290,7 @@ namespace Injector {
         CloseHandle(hThread);
 
 
-        auto hDll{ getModuleHandle(pProcConst->dllPath.substr(pProcConst->dllPath.find_last_of('\\') + 1), hProcess, bitness)};
+        auto hDll{ getModuleHandle(pProcConst.dllPath.substr(pProcConst.dllPath.find_last_of('\\') + 1), hProcess, bitness)};
 
         if (hDll == NULL) {
             CloseHandle(hProcess);
@@ -296,7 +298,7 @@ namespace Injector {
         }
 
 
-        uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(hDll) + pProcConst->calleeDelta };
+        uintptr_t initHooksAddress{ reinterpret_cast<uintptr_t>(hDll) + pProcConst.calleeDelta };
         if (!initHooksAddress) {
             spdlog::error("[Injector] Failed to retrieve callee delta in target");
             return false;
@@ -319,72 +321,6 @@ namespace Injector {
 
         spdlog::info("Successfully injected");
         return true;
-    }
-    void Injector::modeOnce() {
-        for (auto pid : config.processIDs) {
-            injectPID(pid);
-        }
-
-        for (const auto& processCmd : config.processName) {
-            auto position = processCmd.find(" ");
-
-            auto pid = getProcessID((position != std::string::npos) ? processCmd.substr(0, position) : processCmd);
-
-            injectPID(pid);
-            
-        }
-
-    }
-
-    void Injector::modeCreate() {
-
-        spdlog::info("[Injector] in mode create");
-        for (const auto& processCmd : config.processName) {
-            
-            STARTUPINFOA stInfo{};
-            PROCESS_INFORMATION procInfo{};
-
-            spdlog::info("[Injector] Creating process for: {}", processCmd);
-
-
-            auto appNameIndex{ processCmd.find(".exe") + 4 };
-            std::string appName{ processCmd.substr(0, appNameIndex) };
-            std::vector<char> cmdLine;
-
-            for (auto index{ appNameIndex }; index < processCmd.length(); ++index) {
-                cmdLine.push_back(processCmd.at(index));
-            }
-
-
-            
-
-            if (!DetourCreateProcessWithDllExA(
-                appName.c_str(),
-                (appNameIndex == processCmd.length()?NULL: cmdLine.data()),
-                NULL,
-                NULL,
-                FALSE,
-                CREATE_SUSPENDED,
-                NULL,
-                NULL,
-                &stInfo,
-                &procInfo,
-                config.startupDLLPath.c_str(),
-                NULL
-            )) {
-                spdlog::warn("[Injector] Failed creating process for {}, failed with error: {}", processCmd, GetLastError());
-                continue;
-            }
-
-            spdlog::info("[Injector] Created process for: {} successfully", processCmd);
-
-
-            CloseHandle(procInfo.hProcess);
-            CloseHandle(procInfo.hThread);
-
-
-
-        }
 
     }
 
@@ -393,19 +329,21 @@ namespace Injector {
 
         spdlog::info("[Injector] running injector");
 
-        switch (config.injectorMode) {
+        for (auto pid : config.processIDs) {
+            injectPID(pid);
+        }
 
-        case Config::InjectorMode::INJECT_ONCE:
-            modeOnce();
-            break;
+        for (const auto& processCmd : config.processNames) {
+            auto position = processCmd.find(" ");
 
-        case Config::InjectorMode::INJECT_CREATE:
-            modeCreate();
-            break;
+            auto pid = getProcessID((position != std::string::npos) ? processCmd.substr(0, position) : processCmd);
 
-        default:
-            spdlog::error("[Injector] Invalid injector mode received");
-            return false;
+            if (!pid) {
+                spdlog::warn("[Injector] No process found for the command: {}", processCmd);
+                continue;
+            }
+
+            injectPID(pid);
 
         }
 

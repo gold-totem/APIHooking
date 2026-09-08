@@ -49,7 +49,6 @@ namespace {
 namespace Config {
     std::optional<Config> Config::getConfig(std::string_view configPath) {
 
-        spdlog::debug("[Config] configPath: {}", configPath);
 
         std::ifstream ifFile(configPath.data());
         if (!ifFile.is_open()) {
@@ -79,48 +78,25 @@ namespace Config {
         auto path64 = requireField<std::string>(*payload, "path_64", "payload_dll");
         auto path32 = requireField<std::string>(*payload, "path_32", "payload_dll");
         auto calleeName = requireField<std::string>(*payload, "callee_name", "payload_dll");
-        auto startupDLLPath = requireField<std::string>(*payload, "startup_dll_path", "payload_dll");
 
-        if (!path64 || !path32 || !calleeName || !startupDLLPath) return std::nullopt;
+        if (!path64 || !path32 || !calleeName) return std::nullopt;
 
         config.path64 = *path64;
         config.path32 = *path32;
         config.calleeName = *calleeName;
-        config.startupDLLPath = *startupDLLPath;
 
-        const json* injector = requireNode(configJson, "injector", "root", &json::is_object);
-        if (!injector) return std::nullopt;
+        const json* targetPids = requireNode(configJson, "target_pids", "root", &json::is_array);
+        if (!targetPids) return std::nullopt;
 
-        auto mode = requireField<std::string>(*injector, "mode", "injector");
-        if (!mode) return std::nullopt;
-
-        if (*mode == "once") {
-            config.injectorMode = InjectorMode::INJECT_ONCE;
-        }
-
-        else if (*mode == "create") {
-            config.injectorMode = InjectorMode::INJECT_CREATE;
-        }
-        else {
-            spdlog::error("[Config] invalid value for 'mode': {}", *mode);
-            return std::nullopt;
-        }
-
-        if (config.injectorMode == InjectorMode::INJECT_ONCE) {
-            const json* targetPids = requireNode(*injector, "target_pids", "injector", &json::is_array);
-            if (!targetPids) return std::nullopt;
-
-            for (const auto& pid : *targetPids) {
-                if (!pid.is_number_integer()) {
-                    spdlog::error("[Config] target_pids must contain only integers");
-                    return std::nullopt;
-                }
-                config.processIDs.push_back(pid.get<long>());
+        for (const auto& pid : *targetPids) {
+            if (!pid.is_number_integer()) {
+                spdlog::error("[Config] target_pids must contain only integers");
+                return std::nullopt;
             }
-            return config;
+            config.processIDs.push_back(pid.get<long>());
         }
 
-        const json* targetNames = requireNode(*injector, "target_names", "injector", &json::is_array);
+        const json* targetNames = requireNode(configJson, "target_names", "root", &json::is_array);
         if (!targetNames) return std::nullopt;
 
         for (const auto& name : *targetNames) {
@@ -128,11 +104,7 @@ namespace Config {
                 spdlog::error("[Config] target_names must contain only strings");
                 return std::nullopt;
             }
-            config.processName.push_back(name.get<std::string>());
-        }
-
-        if (config.injectorMode == InjectorMode::INJECT_CREATE) {
-            return config;
+            config.processNames.push_back(name.get<std::string>());
         }
 
         spdlog::info("Config created");

@@ -34,9 +34,6 @@ namespace Injector {
         Injector(ProcConsts p64, ProcConsts p32, const Config::Config& c) :proc64(p64), proc32(p32), config(c) {}
 
         bool injectPID(DWORD pid);
-        void modeOnce();
-        void modeCreate();
-
 
     };
 }

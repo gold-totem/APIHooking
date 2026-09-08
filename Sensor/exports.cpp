@@ -1,10 +1,9 @@
-#include <userenv.h>
+#include "includes/hooking.h"
 
 #include "pch.h"
-#include "detours/detours.h"
-#include "includes/hooking.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <detours/detours.h>
 
 namespace Monitor{
 
@@ -28,6 +27,7 @@ namespace Monitor{
 			return false;
 		}
 
+		// TODO: system local time
 		auto now = std::chrono::system_clock::now();
 		auto now_seconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
 
@@ -38,7 +38,9 @@ namespace Monitor{
 		log_path += "\\APIHooking\\" + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
 
 		auto sensor = spdlog::basic_logger_mt("Sensor", log_path, true);
-		spdlog::set_level(spdlog::level::info);
+
+		sensor->set_level(spdlog::level::info);
+		sensor->flush_on(spdlog::level::info);
 
 		return true;
 	}
@@ -133,7 +135,7 @@ extern "C" __declspec(dllexport) bool hookProc() {
 			return false;
 		}
 	}
-	 //--------------------
+	 
 	SPDLOG_INFO("DetourUpdateThread successful for other threads.");
 
 	PssFreeSnapshot(GetCurrentProcess(), snapshotHandle);
@@ -150,6 +152,9 @@ extern "C" __declspec(dllexport) bool hookProc() {
 		DetourTransactionAbort();
 		return false;
 	}
+
+	//--------------------
+
 	SPDLOG_INFO("successfully attached detours.");
 
 	pssStatus = PssWalkMarkerFree(walkMarkerHandle);

@@ -12,4 +12,5 @@
 #include <vector>
 #include <processsnapshot.h>
 #include <filesystem>
+#include <userenv.h>
 #endif //PCH_H

@@ -1,10 +1,9 @@
-#include <spdlog/fmt/fmt.h>
+#include "includes/hooking.h"
 
 #include <phnt_windows.h>
 #include <phnt.h>
-
+#include <spdlog/fmt/fmt.h>
 #include "detours/detours.h"
-#include "includes/hooking.h"
 
 #define CREATE_HOOK(functionName) \
 	{ \
@@ -22,16 +21,16 @@
 
 
 namespace {
-	/*
-	NtOpenProcess()
-NtAllocateVirtualMemoryEx()
-NtWriteVirtualMemory()
-NtCreateThreadEx()
-NtQueueApcThread
-NtMapViewOfSection
-NtQueryInformationProcess
-NtSuspendProcess / NtResumeProcess
-NtCreateUserProcess
+	/* TODO: 
+		NtOpenProcess()
+		NtAllocateVirtualMemoryEx()
+		NtWriteVirtualMemory()
+		NtCreateThreadEx()
+		NtQueueApcThread
+		NtMapViewOfSection
+		NtQueryInformationProcess
+		NtSuspendProcess / NtResumeProcess
+		NtCreateUserProcess
 
 	*/
 
@@ -57,8 +56,9 @@ NtCreateUserProcess
 			_In_ PCUNICODE_STRING DllName,
 			_Out_ PVOID* DllHandle
 		) {
-			if (!sensor) { 
-				sensor->info("LdrLoadDll, DllPath:{}", fmt::ptr(DllName->Buffer));
+			if (sensor) { 
+				std::wstring name(DllName->Buffer, DllName->Length / sizeof(WCHAR));
+				sensor->info("LdrLoadDll, DllName: {}", std::string(name.begin(), name.end())); 
 			}			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
@@ -68,10 +68,7 @@ NtCreateUserProcess
 namespace Monitor {
 	bool createHooks() {
 
-		Monitor::initLogger();
-
 		SPDLOG_INFO("[Hook] createHooks called.");
-
 
 		sensor = spdlog::get("Sensor");
 
