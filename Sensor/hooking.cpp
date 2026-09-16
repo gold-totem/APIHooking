@@ -57,6 +57,8 @@ namespace {
 			_Out_ PVOID* DllHandle
 		) {
 			if (sensor) { 
+
+				//TODO: fix narrowing of wide strings
 				std::wstring name(DllName->Buffer, DllName->Length / sizeof(WCHAR));
 				sensor->info("LdrLoadDll, DllName: {}", std::string(name.begin(), name.end())); 
 			}			

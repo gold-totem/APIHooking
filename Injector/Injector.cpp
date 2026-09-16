@@ -1,12 +1,15 @@
 #include <Windows.h>
 #include <wtsapi32.h>
+#include <psapi.h>
+#include <userenv.h>
+
 #include <string_view>
 #include <cwchar>
 #include <cwctype>
 #include <cstring>
 #include <vector>
-#include <psapi.h>
 #include <optional>
+
 #include <spdlog/spdlog.h>
 #include <detours/detours.h>
 #include "includes/config.h"
@@ -90,7 +93,7 @@ namespace {
     }
 
     uintptr_t getDelta32(std::string_view dll32Path, std::string_view functionName) {
-        //TODO: verify thing is a 32 bit dll
+
         HANDLE hDLLFile = CreateFileA(dll32Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hDLLFile == INVALID_HANDLE_VALUE) {
 
@@ -119,11 +122,18 @@ namespace {
         IMAGE_OPTIONAL_HEADER32* optionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER32*>(&(ntHeader->OptionalHeader));
         IMAGE_EXPORT_DIRECTORY* exportTable = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
+        const WORD* bitType = reinterpret_cast<WORD*>(&(optionalHeader));
+
+        if (*bitType !=  IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+            spdlog::error("[Injector] Provided 32-bit DLL in not 32-bit");
+            return 0;
+        }
+
+
         PUINT32 nameArray = reinterpret_cast<PUINT32>(base + exportTable->AddressOfNames);
         bool foundFunction = false;
         UINT32 index{ 0 };
 
-        //TODO: Use binary search
         for (UINT32 i = 0; i < exportTable->NumberOfNames; i++) {
             UINT32 nameRVA = nameArray[i];
             char* funcName = (char*)(base + nameRVA);
@@ -192,7 +202,9 @@ namespace {
         return NULL;
     }
 
+    std::string expandEnv(std::string_view envVar) {
 
+    }
     
 
 }
@@ -201,13 +213,31 @@ namespace Injector {
 
     std::optional<Injector> Injector::get(const Config::Config& config) {
 
-        //TODO: expand env for these 2
-        constexpr std::string_view kernel32DLL{ "C:\\WINDOWS\\System32\\KERNEL32.DLL" };
-        constexpr std::string_view woWKernel32DLL{ "C:\\WINDOWS\\SysWOW64\\KERNEL32.DLL" };
+
+        char path[MAX_PATH];
+
+        memset(path, 0, sizeof(path));
+
+        if (!ExpandEnvironmentStringsForUserA(
+            NULL,
+            "%WINDIR%",
+            path,
+            sizeof(path)
+        )) {
+            spdlog::error("[Injector] Error expanding %WINDIR%");
+            return std::nullopt;
+        }
+
+        std::string kernel32DLL{ path };
+        kernel32DLL += "\\System32\\KERNEL32.DLL";
+
+        std::string woWKernel32DLL{ path };
+        woWKernel32DLL += "\\SysWOW64\\KERNEL32.DLL";
+    
         constexpr std::string_view loadLibraryName{ "LoadLibraryA" };
 
-        uintptr_t loadLibraryDelta64 = getDelta64(kernel32DLL.data(), loadLibraryName);
-        uintptr_t loadLibraryDelta32 = getDelta32(woWKernel32DLL.data(), loadLibraryName);
+        uintptr_t loadLibraryDelta64 = getDelta64( kernel32DLL, loadLibraryName);
+        uintptr_t loadLibraryDelta32 = getDelta32(woWKernel32DLL, loadLibraryName);
 
         if (!loadLibraryDelta32 || !loadLibraryDelta64) {
             spdlog::error("[Injector] Error retrieving LoadLibraryA delta");
