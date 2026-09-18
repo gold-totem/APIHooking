@@ -75,21 +75,75 @@ namespace {
     }
 
     uintptr_t getDelta64(std::string_view dll64Path, std::string_view functionName) {
-        //TODO: PE parsing for 64 bit too
-        HMODULE hDll = LoadLibraryA(dll64Path.data());
-        if (!hDll) {
-            spdlog::error("[Injector] LoadLibraryA failed with{}",GetLastError());
+
+        HANDLE hDLLFile = CreateFileA(dll64Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hDLLFile == INVALID_HANDLE_VALUE) {
+
+            spdlog::error("[Injector] Invalid handle returned");
             return 0;
         }
-        FARPROC initHooks{ GetProcAddress(hDll, functionName.data()) };
-        if (!initHooks) {
-            spdlog::error("[Injector] GetProcAddress failed for initHooks with error {}", GetLastError());
-            FreeLibrary(hDll);
+        HANDLE hMapping = CreateFileMappingA(hDLLFile, NULL, PAGE_READONLY | SEC_IMAGE, 0, 0, NULL);
+        if (!hMapping) {
+
+            spdlog::error("[Injector] File mapping failed with: {}", GetLastError());
+
+            CloseHandle(hDLLFile);
             return 0;
         }
-        FreeLibrary(hDll);
-        uintptr_t delta64 = reinterpret_cast<uintptr_t>(initHooks) - reinterpret_cast<uintptr_t>(hDll);
-        return delta64;
+        BYTE* base = reinterpret_cast<BYTE*>(MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0));
+        if (!base) {
+
+            spdlog::error("[Injector] Mapping view failed with: {}", GetLastError());
+            CloseHandle(hDLLFile);
+            CloseHandle(hMapping);
+            return 0;
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+
+        PIMAGE_NT_HEADERS64 ntHeader = reinterpret_cast<PIMAGE_NT_HEADERS64>(base + dosHeader->e_lfanew);
+        PIMAGE_OPTIONAL_HEADER64 optionalHeader = reinterpret_cast<PIMAGE_OPTIONAL_HEADER64>(&(ntHeader->OptionalHeader));
+        PIMAGE_EXPORT_DIRECTORY exportTable = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(base + optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+
+        WORD bitType = *reinterpret_cast<WORD*>(optionalHeader);
+
+        if (bitType != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+            spdlog::error("[Injector] Provided 64-bit DLL in not 64-bit");
+            return 0;
+        }
+
+
+        PUINT32 nameArray = reinterpret_cast<PUINT32>(base + exportTable->AddressOfNames);
+        bool foundFunction = false;
+        UINT32 index{ 0 };
+
+        for (UINT32 i = 0; i < exportTable->NumberOfNames; i++) {
+            UINT32 nameRVA = nameArray[i];
+            char* funcName = (char*)(base + nameRVA);
+            if (std::strcmp(functionName.data(), funcName) == 0) {
+                foundFunction = true;
+                index = i;
+            }
+        }
+        if (!foundFunction) {
+            spdlog::error("[Injector] Function: {} not found in {}", functionName, dll64Path);
+
+            UnmapViewOfFile(base);
+            CloseHandle(hMapping);
+            CloseHandle(hDLLFile);
+            return 0;
+        }
+
+        PUINT16 ordinalTable = reinterpret_cast<PUINT16>(base + exportTable->AddressOfNameOrdinals);
+        DWORD* exportAddressTable = reinterpret_cast<DWORD*>(base + exportTable->AddressOfFunctions);
+        DWORD ordinal = ordinalTable[index];
+        uintptr_t offset = static_cast<uintptr_t>(exportAddressTable[ordinal]);
+
+        UnmapViewOfFile(base);
+        CloseHandle(hMapping);
+        CloseHandle(hDLLFile);
+
+        return offset;
     }
 
     uintptr_t getDelta32(std::string_view dll32Path, std::string_view functionName) {
@@ -118,13 +172,14 @@ namespace {
         }
 
         IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+
         IMAGE_NT_HEADERS32* ntHeader = reinterpret_cast<IMAGE_NT_HEADERS32*>(base + dosHeader->e_lfanew);
         IMAGE_OPTIONAL_HEADER32* optionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER32*>(&(ntHeader->OptionalHeader));
         IMAGE_EXPORT_DIRECTORY* exportTable = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
-        const WORD* bitType = reinterpret_cast<WORD*>(&(optionalHeader));
+        WORD bitType = *reinterpret_cast<WORD*>(optionalHeader);
 
-        if (*bitType !=  IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        if (bitType !=  IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
             spdlog::error("[Injector] Provided 32-bit DLL in not 32-bit");
             return 0;
         }

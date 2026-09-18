@@ -27,6 +27,8 @@ target_link_libraries(Injector PRIVATE
     spdlog::spdlog
     nlohmann_json::nlohmann_json
     Wtsapi32.lib
+    Userenv.lib
+
 )
 
 set_target_properties(Injector PROPERTIES

@@ -27,13 +27,12 @@ namespace Monitor{
 			return false;
 		}
 
-		// TODO: system local time
 		auto now = std::chrono::system_clock::now();
-		auto now_seconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+		auto local_time = std::chrono::zoned_time{ std::chrono::current_zone(),now };
 
-		std::string time = std::format("{:%Y-%m-%d_%H-%M-%S}", now_seconds);
+		std::string time = std::format("{:%Y-%m-%d_%H-%M-%S}", local_time);
 
-		std::string log_path = path;
+		std::string log_path{ path };
 
 		log_path += "\\APIHooking\\" + std::filesystem::path(processName).stem().string() + '_' + std::to_string(GetCurrentProcessId()) + '_' + time + ".log";
 

@@ -22,7 +22,6 @@
 
 namespace {
 	/* TODO: 
-		NtOpenProcess()
 		NtAllocateVirtualMemoryEx()
 		NtWriteVirtualMemory()
 		NtCreateThreadEx()
@@ -45,11 +44,22 @@ namespace {
 			_Out_ PVOID* DllHandle
 		);
 
+	using pNtOpenProcess = NTSTATUS
+		(NTAPI*)
+		(
+			_Out_ PHANDLE ProcessHandle,
+			_In_ ACCESS_MASK DesiredAccess,
+			_In_ PCOBJECT_ATTRIBUTES ObjectAttributes,
+			_In_opt_ PCLIENT_ID ClientId
+		);
+
 	namespace TrueFuncPtrs {
 		pLdrLoadDll trueLdrLoadDll{ nullptr };
+		pNtOpenProcess trueNtOpenProcess{ nullptr };
 	}
 
 	namespace DetouredFunc {
+
 		NTSTATUS NTAPI detLdrLoadDll(
 			_In_opt_ PCWSTR DllPath,
 			_In_opt_ PULONG DllCharacteristics,
@@ -58,13 +68,56 @@ namespace {
 		) {
 			if (sensor) { 
 
-				//TODO: fix narrowing of wide strings
-				std::wstring name(DllName->Buffer, DllName->Length / sizeof(WCHAR));
-				sensor->info("LdrLoadDll, DllName: {}", std::string(name.begin(), name.end())); 
+				std::wstring name(
+					DllName->Buffer,
+					DllName->Length / sizeof(WCHAR)
+				);
+
+				int size = WideCharToMultiByte(
+					CP_UTF8,
+					0,
+					name.data(),
+					static_cast<int>(name.size()),
+					nullptr,
+					0,
+					nullptr,
+					nullptr
+				);
+
+				std::string utf8Name(size, '\0');
+
+				WideCharToMultiByte(
+					CP_UTF8,
+					0,
+					name.data(),
+					static_cast<int>(name.size()),
+					utf8Name.data(),
+					size,
+					nullptr,
+					nullptr
+				);
+
+				sensor->info("LdrLoadDll, DllName: {}", utf8Name);
 			}			
 			return TrueFuncPtrs::trueLdrLoadDll(DllPath, DllCharacteristics, DllName, DllHandle);
 		}
+
+
+		NTSTATUS NTAPI detNtOpenProcess(
+				_Out_ PHANDLE ProcessHandle,
+				_In_ ACCESS_MASK DesiredAccess,
+				_In_ PCOBJECT_ATTRIBUTES ObjectAttributes,
+				_In_opt_ PCLIENT_ID ClientId
+			) {
+			if (sensor) {
+
+				sensor->info("NtOpenProcess, PID: {}", *(reinterpret_cast<DWORD*>(ClientId->UniqueProcess)));
+			}
+			return TrueFuncPtrs::trueNtOpenProcess(ProcessHandle, DesiredAccess, ObjectAttributes, ClientId);
+
+		}
 	}
+
 }
 
 namespace Monitor {

@@ -5,18 +5,15 @@
         "callee_name":"hookProc",
         "path_startup_dll":"foo_startup"
     },
-    "injector":{
-        "mode":"once/create",
-        "target_pids":[
+    "target_pids":[
             123,
             321
         ],
-        "target_names":[
+         "target_names":[
 
         "exename1",
-        "exename2 -command ",
-        "ALL_PROCS"
-        ]   
-    },
+        "exename2"
+        ],   
+    
     "log_level":"debug"
 }
