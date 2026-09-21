@@ -22,8 +22,6 @@
 
 namespace {
 	/* TODO: 
-		NtAllocateVirtualMemoryEx()
-		NtWriteVirtualMemory()
 		NtCreateThreadEx()
 		NtQueueApcThread
 		NtMapViewOfSection
@@ -53,9 +51,31 @@ namespace {
 			_In_opt_ PCLIENT_ID ClientId
 		);
 
+	using pNtAllocateVirtualMemoryEx = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE ProcessHandle,
+			_Inout_ _At_(*BaseAddress, _Readable_bytes_(*RegionSize) _Writable_bytes_(*RegionSize) _Post_readable_byte_size_(*RegionSize)) PVOID* BaseAddress,
+			_Inout_ PSIZE_T RegionSize,
+			_In_ ULONG AllocationType,
+			_In_ ULONG PageProtection,
+			_Inout_updates_opt_(ExtendedParameterCount) PMEM_EXTENDED_PARAMETER ExtendedParameters,
+			_In_ ULONG ExtendedParameterCount
+		);
+	using pNtWriteVirtualMemory = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE ProcessHandle,
+			_In_opt_ PVOID BaseAddress,
+			_In_reads_bytes_(NumberOfBytesToWrite) PVOID Buffer,
+			_In_ SIZE_T NumberOfBytesToWrite,
+			_Out_opt_ PSIZE_T NumberOfBytesWritten
+		);
 	namespace TrueFuncPtrs {
 		pLdrLoadDll trueLdrLoadDll{ nullptr };
 		pNtOpenProcess trueNtOpenProcess{ nullptr };
+		pNtAllocateVirtualMemoryEx trueNtAllocateVirtualMemoryEx{ nullptr };
+		pNtWriteVirtualMemory trueNtWriteVirtualMemory{ nullptr };
 	}
 
 	namespace DetouredFunc {
@@ -116,6 +136,40 @@ namespace {
 			return TrueFuncPtrs::trueNtOpenProcess(ProcessHandle, DesiredAccess, ObjectAttributes, ClientId);
 
 		}
+
+
+		NTSTATUS
+			NTAPI
+			detNtAllocateVirtualMemoryEx(
+				_In_ HANDLE ProcessHandle,
+				_Inout_ _At_(*BaseAddress, _Readable_bytes_(*RegionSize) _Writable_bytes_(*RegionSize) _Post_readable_byte_size_(*RegionSize)) PVOID* BaseAddress,
+				_Inout_ PSIZE_T RegionSize,
+				_In_ ULONG AllocationType,
+				_In_ ULONG PageProtection,
+				_Inout_updates_opt_(ExtendedParameterCount) PMEM_EXTENDED_PARAMETER ExtendedParameters,
+				_In_ ULONG ExtendedParameterCount
+			) {
+			if (sensor) {
+				sensor->info("NtAllocateVirtualMemoryEx, PID: {}", GetProcessId(ProcessHandle));
+			}
+			return TrueFuncPtrs::trueNtAllocateVirtualMemoryEx(ProcessHandle, BaseAddress, RegionSize, AllocationType, PageProtection, ExtendedParameters, ExtendedParameterCount);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtWriteVirtualMemory(
+				_In_ HANDLE ProcessHandle,
+				_In_opt_ PVOID BaseAddress,
+				_In_reads_bytes_(NumberOfBytesToWrite) PVOID Buffer,
+				_In_ SIZE_T NumberOfBytesToWrite,
+				_Out_opt_ PSIZE_T NumberOfBytesWritten
+			) {
+			if (sensor) {
+				sensor->info("NtWriteVirtualMemory, PID: {}", GetProcessId(ProcessHandle));
+			}
+			return TrueFuncPtrs::trueNtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite, NumberOfBytesWritten);
+		}
+
 	}
 
 }
@@ -142,6 +196,8 @@ namespace Monitor {
 
 		CREATE_HOOK(LdrLoadDll);
 		CREATE_HOOK(NtOpenProcess);
+		CREATE_HOOK(NtAllocateVirtualMemoryEx)
+		CREATE_HOOK(NtWriteVirtualMemory);
 
 		SPDLOG_INFO("[Hook] Hooks Created");
 		return true;
@@ -153,6 +209,8 @@ namespace Monitor {
 
 		ATTACH_HOOK(LdrLoadDll);
 		ATTACH_HOOK(NtOpenProcess);
+		ATTACH_HOOK(NtAllocateVirtualMemoryEx);
+		ATTACH_HOOK(NtWriteVirtualMemory);
 
 		return !isError;
 	}

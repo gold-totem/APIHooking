@@ -20,9 +20,9 @@ namespace {
 
     using pInitHooks = bool(__cdecl*)();
     enum class Bitness {
+        BIT_INVALID,
         BIT_64,
-        BIT_32,
-        BIT_INVALID
+        BIT_32
     };
 
     DWORD getProcessID(std::string_view processName) {
@@ -74,82 +74,7 @@ namespace {
         return Bitness::BIT_32;
     }
 
-    uintptr_t getDelta64(std::string_view dll64Path, std::string_view functionName) {
-
-        HANDLE hDLLFile = CreateFileA(dll64Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hDLLFile == INVALID_HANDLE_VALUE) {
-
-            spdlog::error("[Injector] Invalid handle returned");
-            return 0;
-        }
-        HANDLE hMapping = CreateFileMappingA(hDLLFile, NULL, PAGE_READONLY | SEC_IMAGE, 0, 0, NULL);
-        if (!hMapping) {
-
-            spdlog::error("[Injector] File mapping failed with: {}", GetLastError());
-
-            CloseHandle(hDLLFile);
-            return 0;
-        }
-        BYTE* base = reinterpret_cast<BYTE*>(MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0));
-        if (!base) {
-
-            spdlog::error("[Injector] Mapping view failed with: {}", GetLastError());
-            CloseHandle(hDLLFile);
-            CloseHandle(hMapping);
-            return 0;
-        }
-
-        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
-
-        PIMAGE_NT_HEADERS64 ntHeader = reinterpret_cast<PIMAGE_NT_HEADERS64>(base + dosHeader->e_lfanew);
-        PIMAGE_OPTIONAL_HEADER64 optionalHeader = reinterpret_cast<PIMAGE_OPTIONAL_HEADER64>(&(ntHeader->OptionalHeader));
-        PIMAGE_EXPORT_DIRECTORY exportTable = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(base + optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-
-        WORD bitType = *reinterpret_cast<WORD*>(optionalHeader);
-
-        if (bitType != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
-            spdlog::error("[Injector] Provided 64-bit DLL in not 64-bit");
-            UnmapViewOfFile(base);
-            CloseHandle(hMapping);
-            CloseHandle(hDLLFile);
-            return 0;
-        }
-
-
-        PUINT32 nameArray = reinterpret_cast<PUINT32>(base + exportTable->AddressOfNames);
-        bool foundFunction = false;
-        UINT32 index{ 0 };
-
-        for (UINT32 i = 0; i < exportTable->NumberOfNames; i++) {
-            UINT32 nameRVA = nameArray[i];
-            char* funcName = (char*)(base + nameRVA);
-            if (std::strcmp(functionName.data(), funcName) == 0) {
-                foundFunction = true;
-                index = i;
-            }
-        }
-        if (!foundFunction) {
-            spdlog::error("[Injector] Function: {} not found in {}", functionName, dll64Path);
-
-            UnmapViewOfFile(base);
-            CloseHandle(hMapping);
-            CloseHandle(hDLLFile);
-            return 0;
-        }
-
-        PUINT16 ordinalTable = reinterpret_cast<PUINT16>(base + exportTable->AddressOfNameOrdinals);
-        DWORD* exportAddressTable = reinterpret_cast<DWORD*>(base + exportTable->AddressOfFunctions);
-        DWORD ordinal = ordinalTable[index];
-        uintptr_t offset = static_cast<uintptr_t>(exportAddressTable[ordinal]);
-
-        UnmapViewOfFile(base);
-        CloseHandle(hMapping);
-        CloseHandle(hDLLFile);
-
-        return offset;
-    }
-
-    uintptr_t getDelta32(std::string_view dll32Path, std::string_view functionName) {
+    uintptr_t getDelta(std::string_view dll32Path, std::string_view functionName, Bitness bitness) {
 
         HANDLE hDLLFile = CreateFileA(dll32Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hDLLFile == INVALID_HANDLE_VALUE) {
@@ -174,28 +99,48 @@ namespace {
             return 0;
         }
 
-        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+        PIMAGE_DOS_HEADER pDOSHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(base);
+        PIMAGE_EXPORT_DIRECTORY pExportTable{ nullptr };
 
-        IMAGE_NT_HEADERS32* ntHeader = reinterpret_cast<IMAGE_NT_HEADERS32*>(base + dosHeader->e_lfanew);
-        IMAGE_OPTIONAL_HEADER32* optionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER32*>(&(ntHeader->OptionalHeader));
-        IMAGE_EXPORT_DIRECTORY* exportTable = reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(base + optionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+        if (bitness == Bitness::BIT_32) {
+            PIMAGE_NT_HEADERS32 pNTHeader = reinterpret_cast<IMAGE_NT_HEADERS32*>(base + pDOSHeader->e_lfanew);
+            PIMAGE_OPTIONAL_HEADER32 pOptionalHeader = reinterpret_cast<IMAGE_OPTIONAL_HEADER32*>(&(pNTHeader->OptionalHeader));
+            pExportTable = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(base + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
-        WORD bitType = *reinterpret_cast<WORD*>(optionalHeader);
+            WORD bitType = *reinterpret_cast<WORD*>(pOptionalHeader);
 
-        if (bitType !=  IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
-            spdlog::error("[Injector] Provided 32-bit DLL in not 32-bit");
-            UnmapViewOfFile(base);
-            CloseHandle(hMapping);
-            CloseHandle(hDLLFile);
-            return 0;
+            if (bitType != IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+                spdlog::error("[Injector] Provided 32-bit DLL in not 32-bit");
+                UnmapViewOfFile(base);
+                CloseHandle(hMapping);
+                CloseHandle(hDLLFile);
+                return 0;
+            }
         }
 
+        else {
+            PIMAGE_NT_HEADERS64 pNTHeader = reinterpret_cast<PIMAGE_NT_HEADERS64>(base + pDOSHeader->e_lfanew);
+            PIMAGE_OPTIONAL_HEADER64 pOptionalHeader = reinterpret_cast<PIMAGE_OPTIONAL_HEADER64>(&(pNTHeader->OptionalHeader));
+            pExportTable = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(base + pOptionalHeader->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
-        PUINT32 nameArray = reinterpret_cast<PUINT32>(base + exportTable->AddressOfNames);
+            WORD bitType = *reinterpret_cast<WORD*>(pOptionalHeader);
+
+            if (bitType != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+                spdlog::error("[Injector] Provided 64-bit DLL in not 64-bit");
+                UnmapViewOfFile(base);
+                CloseHandle(hMapping);
+                CloseHandle(hDLLFile);
+                return 0;
+            }
+        }
+       
+
+
+        PUINT32 nameArray = reinterpret_cast<PUINT32>(base + pExportTable->AddressOfNames);
         bool foundFunction = false;
         UINT32 index{ 0 };
 
-        for (UINT32 i = 0; i < exportTable->NumberOfNames; i++) {
+        for (UINT32 i = 0; i < pExportTable->NumberOfNames; i++) {
             UINT32 nameRVA = nameArray[i];
             char* funcName = (char*)(base + nameRVA);
             if (std::strcmp(functionName.data(), funcName) == 0) {
@@ -212,8 +157,8 @@ namespace {
             return 0;
         }
 
-        PUINT16 ordinalTable = reinterpret_cast<PUINT16>(base + exportTable->AddressOfNameOrdinals);
-        DWORD* exportAddressTable = reinterpret_cast<DWORD*>(base + exportTable->AddressOfFunctions);
+        PUINT16 ordinalTable = reinterpret_cast<PUINT16>(base + pExportTable->AddressOfNameOrdinals);
+        DWORD* exportAddressTable = reinterpret_cast<DWORD*>(base + pExportTable->AddressOfFunctions);
         DWORD ordinal = ordinalTable[index];
         uintptr_t offset = static_cast<uintptr_t>(exportAddressTable[ordinal]);
 
@@ -292,16 +237,16 @@ namespace Injector {
     
         constexpr std::string_view loadLibraryName{ "LoadLibraryA" };
 
-        uintptr_t loadLibraryDelta64 = getDelta64( kernel32DLL, loadLibraryName);
-        uintptr_t loadLibraryDelta32 = getDelta32(woWKernel32DLL, loadLibraryName);
+        uintptr_t loadLibraryDelta64 = getDelta( kernel32DLL, loadLibraryName, Bitness::BIT_64);
+        uintptr_t loadLibraryDelta32 = getDelta(woWKernel32DLL, loadLibraryName, Bitness::BIT_32);
 
         if (!loadLibraryDelta32 || !loadLibraryDelta64) {
             spdlog::error("[Injector] Error retrieving LoadLibraryA delta");
             return std::nullopt;
         }
 
-        uintptr_t calleeDelta64 = getDelta64(config.path64, config.calleeName);
-        uintptr_t calleeDelta32 = getDelta32(config.path32, config.calleeName);
+        uintptr_t calleeDelta64 = getDelta(config.path64, config.calleeName, Bitness::BIT_64);
+        uintptr_t calleeDelta32 = getDelta(config.path32, config.calleeName, Bitness::BIT_32);
 
         if (!calleeDelta64 || !calleeDelta32) {
             spdlog::error("[Injector] Error retrieving callee delta");
