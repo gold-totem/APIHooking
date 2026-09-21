@@ -110,8 +110,8 @@ namespace {
 				_In_opt_ PCLIENT_ID ClientId
 			) {
 			if (sensor) {
-
-				sensor->info("NtOpenProcess, PID: {}", *(reinterpret_cast<DWORD*>(ClientId->UniqueProcess)));
+				if (ClientId && ClientId->UniqueProcess) sensor->info("NtOpenProcess, PID: {}", *(reinterpret_cast<DWORD*>(ClientId->UniqueProcess)));
+				else sensor->info("NtOpenProcess");
 			}
 			return TrueFuncPtrs::trueNtOpenProcess(ProcessHandle, DesiredAccess, ObjectAttributes, ClientId);
 
@@ -131,7 +131,6 @@ namespace Monitor {
 			SPDLOG_ERROR("[Hook] Couldn't retrive logger");
 			return false;
 		}
-		SPDLOG_INFO("[Hook] createHooks called.");
 
 		HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
 		if (!hNtdll) {
@@ -142,6 +141,7 @@ namespace Monitor {
 		SPDLOG_INFO("[Hook] Retrieved ntdll handle.");
 
 		CREATE_HOOK(LdrLoadDll);
+		CREATE_HOOK(NtOpenProcess);
 
 		SPDLOG_INFO("[Hook] Hooks Created");
 		return true;
@@ -152,6 +152,7 @@ namespace Monitor {
 		bool isError{ false };
 
 		ATTACH_HOOK(LdrLoadDll);
+		ATTACH_HOOK(NtOpenProcess);
 
 		return !isError;
 	}

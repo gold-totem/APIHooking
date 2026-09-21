@@ -54,7 +54,7 @@ namespace {
     }
     Bitness getProcessBitType(HANDLE hProcess) {
         if (!hProcess) {
-            spdlog::error("[Injector] Invalid process Handle recived");
+            spdlog::error("[Injector] Invalid process Handle received");
             return Bitness::BIT_INVALID;
         }
         USHORT processMachine{ 0 };
@@ -109,6 +109,9 @@ namespace {
 
         if (bitType != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
             spdlog::error("[Injector] Provided 64-bit DLL in not 64-bit");
+            UnmapViewOfFile(base);
+            CloseHandle(hMapping);
+            CloseHandle(hDLLFile);
             return 0;
         }
 
@@ -181,6 +184,9 @@ namespace {
 
         if (bitType !=  IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
             spdlog::error("[Injector] Provided 32-bit DLL in not 32-bit");
+            UnmapViewOfFile(base);
+            CloseHandle(hMapping);
+            CloseHandle(hDLLFile);
             return 0;
         }
 
@@ -224,11 +230,11 @@ namespace {
 
         DWORD sizeNeeded = 0;
         if (!EnumProcessModulesEx(hProcess, nullptr, 0, &sizeNeeded, flags)) {
-            spdlog::error("EnumProcessModulesEx retrive: {}", GetLastError());
+            spdlog::error("EnumProcessModulesEx retrieve: {}", GetLastError());
         }
 
         if (sizeNeeded == 0) { 
-            spdlog::error("Couldn't retrive required buffer size to enumerate modules for {}", moduleName);
+            spdlog::error("Couldn't retrieve required buffer size to enumerate modules for {}", moduleName);
             return NULL;
         }
 
@@ -256,12 +262,7 @@ namespace {
         spdlog::error("Could not find module {} in the target process", moduleName);
         return NULL;
     }
-
-    std::string expandEnv(std::string_view envVar) {
-
-    }
-    
-
+   
 }
 namespace Injector {
 

@@ -67,16 +67,7 @@ extern "C" __declspec(dllexport) bool hookProc() {
 
 	SPDLOG_INFO("DetourTransactionBegin successful.");
 
-	HANDLE hThread = GetCurrentThread();
-	if (!hThread) {
-		DetourTransactionAbort();
-		SPDLOG_ERROR("GetCurrentThread failed: {}.", GetLastError());
-		return false;
-	}
-
-	SPDLOG_INFO("GetCurrentThread successful.");
-
-	if ((DetourUpdateThread(hThread)) != NO_ERROR) {
+	if ((DetourUpdateThread(GetCurrentThread())) != NO_ERROR) {
 		SPDLOG_ERROR("DetourUpdateThread failed.");
 		DetourTransactionAbort();
 		return false;
@@ -148,7 +139,6 @@ extern "C" __declspec(dllexport) bool hookProc() {
 	
 	if ((DetourTransactionCommit()) != NO_ERROR) {
 		SPDLOG_ERROR("DetourTransactionCommit failed.");
-		DetourTransactionAbort();
 		return false;
 	}
 

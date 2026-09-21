@@ -2,12 +2,13 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <Windows.h>
 
 namespace Config {
 
     struct Config {
         std::vector<std::string> processNames;
-        std::vector<long> processIDs;
+        std::vector<DWORD> processIDs;
         std::string path64;
         std::string path32;
         std::string calleeName;
