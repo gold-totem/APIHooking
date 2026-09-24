@@ -1,19 +1,17 @@
 {
-    "payload_dll":{
-        "path_64":"foo64.dll",
-        "path_32":"foo64.dll",
-        "callee_name":"hookProc",
-        "path_startup_dll":"foo_startup"
-    },
-    "target_pids":[
-            123,
-            321
-        ],
-         "target_names":[
-
-        "exename1",
-        "exename2"
-        ],   
-    
-    "log_level":"debug"
+  "payload_dll": {
+    "path_64": "foo64.dll",
+    "path_32": "foo64.dll",
+    "callee_name": "hookProc",
+    "path_startup_dll": "foo_startup"
+  },
+  "target_pids": [
+    123,
+    321
+  ],
+  "target_names": [
+    "exename1",
+    "exename2"
+  ],
+  "log_level": "debug"
 }
