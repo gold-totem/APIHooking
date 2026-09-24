@@ -74,12 +74,12 @@ namespace {
         return Bitness::BIT_32;
     }
 
-    uintptr_t getDelta(std::string_view dll32Path, std::string_view functionName, Bitness bitness) {
+    uintptr_t getDelta(std::string_view dllPath, std::string_view functionName, Bitness bitness) {
 
-        HANDLE hDLLFile = CreateFileA(dll32Path.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        HANDLE hDLLFile = CreateFileA(dllPath.data(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hDLLFile == INVALID_HANDLE_VALUE) {
 
-            spdlog::error("[Injector] Invalid handle returned");
+            spdlog::error("[Injector] Invalid handle returned for DLL: {}, error:{}", dllPath, GetLastError());
             return 0;
         }
         HANDLE hMapping = CreateFileMappingA(hDLLFile, NULL, PAGE_READONLY | SEC_IMAGE, 0, 0, NULL);
@@ -149,7 +149,7 @@ namespace {
             }
         }
         if (!foundFunction) {
-            spdlog::error("[Injector] Function: {} not found in {}", functionName, dll32Path);
+            spdlog::error("[Injector] Function: {} not found in {}", functionName, dllPath);
 
             UnmapViewOfFile(base);
             CloseHandle(hMapping);

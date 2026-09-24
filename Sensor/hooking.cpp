@@ -21,15 +21,6 @@
 
 
 namespace {
-	/* TODO: 
-		NtCreateThreadEx()
-		NtQueueApcThread
-		NtMapViewOfSection
-		NtQueryInformationProcess
-		NtSuspendProcess / NtResumeProcess
-		NtCreateUserProcess
-
-	*/
 
 	std::shared_ptr<spdlog::logger> sensor{ nullptr };
 
@@ -71,11 +62,99 @@ namespace {
 			_In_ SIZE_T NumberOfBytesToWrite,
 			_Out_opt_ PSIZE_T NumberOfBytesWritten
 		);
+
+	using pNtCreateThreadEx = NTSTATUS
+		(NTAPI*)
+		(
+			_Out_ PHANDLE ThreadHandle,
+			_In_ ACCESS_MASK DesiredAccess,
+			_In_opt_ PCOBJECT_ATTRIBUTES ObjectAttributes,
+			_In_ HANDLE ProcessHandle,
+			_In_ PUSER_THREAD_START_ROUTINE StartRoutine,
+			_In_opt_ PVOID Argument,
+			_In_ ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
+			_In_ SIZE_T ZeroBits,
+			_In_ SIZE_T StackSize,
+			_In_ SIZE_T MaximumStackSize,
+			_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+		);
+
+	using pNtCreateUserProcess = NTSTATUS
+		(NTAPI*)
+		(
+			_Out_ PHANDLE ProcessHandle,
+			_Out_ PHANDLE ThreadHandle,
+			_In_ ACCESS_MASK ProcessDesiredAccess,
+			_In_ ACCESS_MASK ThreadDesiredAccess,
+			_In_opt_ PCOBJECT_ATTRIBUTES ProcessObjectAttributes,
+			_In_opt_ PCOBJECT_ATTRIBUTES ThreadObjectAttributes,
+			_In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+			_In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+			_In_opt_ PRTL_USER_PROCESS_PARAMETERS ProcessParameters,
+			_Inout_ PPS_CREATE_INFO CreateInfo,
+			_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+		);
+
+	using pNtSuspendProcess = NTSTATUS
+	(NTAPI*)
+		(
+			_In_ HANDLE ProcessHandle
+		);
+
+	using pNtResumeProcess = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE ProcessHandle
+		);
+
+	using pNtQueueApcThread = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE ThreadHandle,
+			_In_ PPS_APC_ROUTINE ApcRoutine, // RtlDispatchAPC
+			_In_opt_ PVOID ApcArgument1,
+			_In_opt_ PVOID ApcArgument2,
+			_In_opt_ PVOID ApcArgument3
+		);
+
+	using pNtMapViewOfSection = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE SectionHandle,
+			_In_ HANDLE ProcessHandle,
+			_Inout_ _At_(*BaseAddress, _Readable_bytes_(*ViewSize) _Writable_bytes_(*ViewSize) _Post_readable_byte_size_(*ViewSize)) PVOID* BaseAddress,
+			_In_ ULONG_PTR ZeroBits,
+			_In_ SIZE_T CommitSize,
+			_Inout_opt_ PLARGE_INTEGER SectionOffset,
+			_Inout_ PSIZE_T ViewSize,
+			_In_ SECTION_INHERIT InheritDisposition,
+			_In_ ULONG AllocationType,
+			_In_ ULONG PageProtection
+		);
+
+	using pNtQueryInformationProcess = NTSTATUS
+		(NTAPI*)
+		(
+			_In_ HANDLE ProcessHandle,
+			_In_ PROCESSINFOCLASS ProcessInformationClass,
+			_Out_writes_bytes_(ProcessInformationLength) PVOID ProcessInformation,
+			_In_ ULONG ProcessInformationLength,
+			_Out_opt_ PULONG ReturnLength
+		);
+
 	namespace TrueFuncPtrs {
 		pLdrLoadDll trueLdrLoadDll{ nullptr };
 		pNtOpenProcess trueNtOpenProcess{ nullptr };
 		pNtAllocateVirtualMemoryEx trueNtAllocateVirtualMemoryEx{ nullptr };
 		pNtWriteVirtualMemory trueNtWriteVirtualMemory{ nullptr };
+		pNtCreateThreadEx trueNtCreateThreadEx{ nullptr };
+		pNtCreateUserProcess trueNtCreateUserProcess{ nullptr };
+		pNtSuspendProcess trueNtSuspendProcess{ nullptr };
+		pNtResumeProcess trueNtResumeProcess{ nullptr };
+		pNtQueueApcThread trueNtQueueApcThread{ nullptr };
+		pNtMapViewOfSection trueNtMapViewOfSection{ nullptr };
+		pNtQueryInformationProcess trueNtQueryInformationProcess{ nullptr };
+
 	}
 
 	namespace DetouredFunc {
@@ -130,8 +209,7 @@ namespace {
 				_In_opt_ PCLIENT_ID ClientId
 			) {
 			if (sensor) {
-				if (ClientId && ClientId->UniqueProcess) sensor->info("NtOpenProcess, PID: {}", *(reinterpret_cast<DWORD*>(ClientId->UniqueProcess)));
-				else sensor->info("NtOpenProcess");
+				sensor->info("NtOpenProcess");
 			}
 			return TrueFuncPtrs::trueNtOpenProcess(ProcessHandle, DesiredAccess, ObjectAttributes, ClientId);
 
@@ -150,7 +228,7 @@ namespace {
 				_In_ ULONG ExtendedParameterCount
 			) {
 			if (sensor) {
-				sensor->info("NtAllocateVirtualMemoryEx, PID: {}", GetProcessId(ProcessHandle));
+				sensor->info("NtAllocateVirtualMemoryEx");
 			}
 			return TrueFuncPtrs::trueNtAllocateVirtualMemoryEx(ProcessHandle, BaseAddress, RegionSize, AllocationType, PageProtection, ExtendedParameters, ExtendedParameterCount);
 		}
@@ -165,9 +243,126 @@ namespace {
 				_Out_opt_ PSIZE_T NumberOfBytesWritten
 			) {
 			if (sensor) {
-				sensor->info("NtWriteVirtualMemory, PID: {}", GetProcessId(ProcessHandle));
+				sensor->info("NtWriteVirtualMemory");
 			}
 			return TrueFuncPtrs::trueNtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite, NumberOfBytesWritten);
+		}
+
+
+		NTSTATUS
+			NTAPI
+			detNtCreateThreadEx(
+				_Out_ PHANDLE ThreadHandle,
+				_In_ ACCESS_MASK DesiredAccess,
+				_In_opt_ PCOBJECT_ATTRIBUTES ObjectAttributes,
+				_In_ HANDLE ProcessHandle,
+				_In_ PUSER_THREAD_START_ROUTINE StartRoutine,
+				_In_opt_ PVOID Argument,
+				_In_ ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
+				_In_ SIZE_T ZeroBits,
+				_In_ SIZE_T StackSize,
+				_In_ SIZE_T MaximumStackSize,
+				_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+			) {
+			if (sensor) {
+				sensor->info("NtCreateThreadEx");
+			}
+			return TrueFuncPtrs::trueNtCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtCreateUserProcess(
+				_Out_ PHANDLE ProcessHandle,
+				_Out_ PHANDLE ThreadHandle,
+				_In_ ACCESS_MASK ProcessDesiredAccess,
+				_In_ ACCESS_MASK ThreadDesiredAccess,
+				_In_opt_ PCOBJECT_ATTRIBUTES ProcessObjectAttributes,
+				_In_opt_ PCOBJECT_ATTRIBUTES ThreadObjectAttributes,
+				_In_ ULONG ProcessFlags, // PROCESS_CREATE_FLAGS_*
+				_In_ ULONG ThreadFlags, // THREAD_CREATE_FLAGS_*
+				_In_opt_ PRTL_USER_PROCESS_PARAMETERS ProcessParameters,
+				_Inout_ PPS_CREATE_INFO CreateInfo,
+				_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+			) {
+			if (sensor) {
+				sensor->info("NtCreateUserProcess");
+			}
+			return TrueFuncPtrs::trueNtCreateUserProcess(ProcessHandle, ThreadHandle, ProcessDesiredAccess, ThreadDesiredAccess, ProcessObjectAttributes, ThreadObjectAttributes, ProcessFlags, ThreadFlags, ProcessParameters, CreateInfo, AttributeList);
+
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtSuspendProcess(
+				_In_ HANDLE ProcessHandle
+			) {
+			if (sensor) {
+				sensor->info("NtSuspendProcess");
+			}
+			return TrueFuncPtrs::trueNtSuspendProcess(ProcessHandle);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtResumeProcess(
+				_In_ HANDLE ProcessHandle
+			) {
+			if (sensor) {
+				sensor->info("NtResumeProcess");
+			}
+			return TrueFuncPtrs::trueNtResumeProcess(ProcessHandle);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtQueueApcThread(
+				_In_ HANDLE ThreadHandle,
+				_In_ PPS_APC_ROUTINE ApcRoutine, // RtlDispatchAPC
+				_In_opt_ PVOID ApcArgument1,
+				_In_opt_ PVOID ApcArgument2,
+				_In_opt_ PVOID ApcArgument3
+			) {
+			if (sensor) {
+				sensor->info("NtQueueApcThread");
+			}
+			return TrueFuncPtrs::trueNtQueueApcThread(ThreadHandle, ApcRoutine, ApcArgument1, ApcArgument2, ApcArgument3);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtMapViewOfSection(
+				_In_ HANDLE SectionHandle,
+				_In_ HANDLE ProcessHandle,
+				_Inout_ _At_(*BaseAddress, _Readable_bytes_(*ViewSize) _Writable_bytes_(*ViewSize) _Post_readable_byte_size_(*ViewSize)) PVOID* BaseAddress,
+				_In_ ULONG_PTR ZeroBits,
+				_In_ SIZE_T CommitSize,
+				_Inout_opt_ PLARGE_INTEGER SectionOffset,
+				_Inout_ PSIZE_T ViewSize,
+				_In_ SECTION_INHERIT InheritDisposition,
+				_In_ ULONG AllocationType,
+				_In_ ULONG PageProtection
+			) {
+			if (sensor) {
+				sensor->info("NtMapViewOfSection");
+			}
+			return TrueFuncPtrs::trueNtMapViewOfSection(SectionHandle, ProcessHandle, BaseAddress, ZeroBits, CommitSize, SectionOffset, ViewSize, InheritDisposition, AllocationType, PageProtection);
+		}
+
+		NTSTATUS
+			NTAPI
+			detNtQueryInformationProcess(
+				_In_ HANDLE ProcessHandle,
+				_In_ PROCESSINFOCLASS ProcessInformationClass,
+				_Out_writes_bytes_(ProcessInformationLength) PVOID ProcessInformation,
+				_In_ ULONG ProcessInformationLength,
+				_Out_opt_ PULONG ReturnLength
+			) {
+			if (sensor) {
+				sensor->info("NtQueryInformationProcess");
+			}
+			return TrueFuncPtrs::trueNtQueryInformationProcess(ProcessHandle, ProcessInformationClass, ProcessInformation, ProcessInformationLength, ReturnLength);
+
 		}
 
 	}
@@ -198,7 +393,14 @@ namespace Monitor {
 		CREATE_HOOK(NtOpenProcess);
 		CREATE_HOOK(NtAllocateVirtualMemoryEx)
 		CREATE_HOOK(NtWriteVirtualMemory);
-
+		CREATE_HOOK(NtCreateThreadEx);
+		CREATE_HOOK(NtCreateUserProcess);
+		CREATE_HOOK(NtSuspendProcess);
+		CREATE_HOOK(NtResumeProcess);
+		CREATE_HOOK(NtQueueApcThread);
+		CREATE_HOOK(NtMapViewOfSection);
+		CREATE_HOOK(NtQueryInformationProcess);
+		
 		SPDLOG_INFO("[Hook] Hooks Created");
 		return true;
 
@@ -211,6 +413,14 @@ namespace Monitor {
 		ATTACH_HOOK(NtOpenProcess);
 		ATTACH_HOOK(NtAllocateVirtualMemoryEx);
 		ATTACH_HOOK(NtWriteVirtualMemory);
+		ATTACH_HOOK(NtCreateThreadEx);
+		ATTACH_HOOK(NtCreateUserProcess);
+		ATTACH_HOOK(NtSuspendProcess);
+		ATTACH_HOOK(NtResumeProcess);
+		ATTACH_HOOK(NtQueueApcThread);
+		ATTACH_HOOK(NtMapViewOfSection);
+		ATTACH_HOOK(NtQueryInformationProcess);
+
 
 		return !isError;
 	}
